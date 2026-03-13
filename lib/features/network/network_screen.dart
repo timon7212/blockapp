@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart' show Share;
 import '../../shared/providers/app_providers.dart';
 import '../../design_system/colors/app_colors.dart';
 import '../../design_system/typography/app_typography.dart';
-import '../../design_system/widgets/app_card.dart';
+import '../../design_system/widgets/surface_card.dart';
+import '../../design_system/widgets/glass_card.dart';
 import '../../design_system/widgets/coin_badge.dart';
+import '../../design_system/widgets/gradient_background.dart';
+import '../../design_system/widgets/app_toast.dart';
+import '../../core/utils/formatters.dart';
 import '../../models/referral_level_model.dart';
 import '../../models/wallet_model.dart';
+import '../../services/ad_service.dart';
 
 class NetworkScreen extends ConsumerWidget {
   const NetworkScreen({super.key});
@@ -17,135 +24,226 @@ class NetworkScreen extends ConsumerWidget {
     final user = ref.watch(userProvider);
     final wallet = ref.watch(walletProvider);
     final levels = ref.watch(referralLevelsProvider);
-    final pendingTotal = ref.watch(totalPendingReferralCoins);
+    final pendingTotal = ref.watch(totalPendingReferralPoints);
     final totalEarned = levels.fold<int>(0, (sum, l) => sum + l.totalCollected);
     final totalUsers = levels.fold<int>(0, (s, l) => s + l.activeUsers);
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-              child: Row(
-                children: [
-                  Text('Network', style: AppTypography.displaySmall),
-                  const Spacer(),
-                  CoinBadge(amount: wallet.totalCoins),
-                ],
-              ),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: AppCard(
-                padding: const EdgeInsets.all(20),
-                child: Column(
+    return GradientBackground(
+      child: SafeArea(
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                child: Row(
                   children: [
-                    Container(
-                      width: 64, height: 64,
-                      decoration: BoxDecoration(gradient: AppColors.primaryGradient, borderRadius: BorderRadius.circular(20)),
-                      child: const Icon(Icons.people_rounded, color: Colors.white, size: 30),
-                    ),
-                    const SizedBox(height: 14),
-                    Text('Invite friends.\nEarn from their activity.', textAlign: TextAlign.center, style: AppTypography.headlineMedium.copyWith(height: 1.3)),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Build your network up to 5 levels deep. When your referrals watch ads, you earn points from their activity.',
-                      textAlign: TextAlign.center,
-                      style: AppTypography.bodySmall.copyWith(height: 1.4),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        _StatBox(value: '${user.directInvites}', label: 'Invites'),
-                        const SizedBox(width: 10),
-                        _StatBox(value: '$totalUsers', label: 'Users', isBold: true),
-                        const SizedBox(width: 10),
-                        _StatBox(value: '$totalEarned', label: 'Earned', isPoints: true),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Your Code', style: AppTypography.labelMedium),
-                              const SizedBox(height: 2),
-                              Text(user.referralCode, style: AppTypography.headlineLarge.copyWith(color: AppColors.primary, letterSpacing: 2)),
-                            ],
-                          ),
+                    Text('Network', style: AppTypography.displaySmall),
+                    const Spacer(),
+                    CoinBadge(amount: wallet.totalPoints),
+                  ],
+                ),
+              ).animate().fadeIn(duration: 400.ms),
+            ),
+            SliverToBoxAdapter(child: const SizedBox(height: 24)),
+
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: GlassCard(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(18),
                         ),
-                        GestureDetector(
-                          onTap: () {
-                            Clipboard.setData(ClipboardData(text: user.referralCode));
-                            HapticFeedback.mediumImpact();
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code copied!')));
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                            decoration: BoxDecoration(color: AppColors.primaryLight, borderRadius: BorderRadius.circular(10)),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
+                        child: const Icon(Icons.people_rounded, color: AppColors.primary, size: 26),
+                      ),
+                      const SizedBox(height: 16),
+                      Text('Invite & Earn', style: AppTypography.headlineLarge, textAlign: TextAlign.center),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Earn from 2 levels deep. Watch an ad to collect your network earnings.',
+                        textAlign: TextAlign.center,
+                        style: AppTypography.bodySmall.copyWith(height: 1.5),
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          _StatPill(value: '${user.directInvites}', label: 'Invites'),
+                          const SizedBox(width: 8),
+                          _StatPill(value: '$totalUsers', label: 'Network'),
+                          const SizedBox(width: 8),
+                          _StatPill(value: Formatters.points(totalEarned), label: 'Earned'),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Icon(Icons.copy_rounded, size: 16, color: AppColors.primary),
-                                const SizedBox(width: 6),
-                                Text('Copy', style: AppTypography.labelMedium.copyWith(color: AppColors.primary, fontWeight: FontWeight.w600)),
+                                Text('Your Code', style: AppTypography.caption),
+                                const SizedBox(height: 4),
+                                Text(user.referralCode, style: AppTypography.headlineLarge.copyWith(letterSpacing: 2)),
                               ],
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            if (pendingTotal > 0)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                child: AppCard(
-                  color: AppColors.coinLight,
-                  padding: const EdgeInsets.all(14),
-                  child: Row(
-                    children: [
-                      const Text('⚡', style: TextStyle(fontSize: 20)),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          '$pendingTotal points pending! Watch an ad on each level to collect before midnight.',
-                          style: AppTypography.bodySmall.copyWith(color: AppColors.coinDark, fontWeight: FontWeight.w500),
-                        ),
+                          GestureDetector(
+                            onTap: () {
+                              Clipboard.setData(ClipboardData(text: user.referralCode));
+                              HapticFeedback.mediumImpact();
+                              AppToast.show(context, message: 'Code copied!', type: ToastType.success);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: AppColors.surfaceMid,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: AppColors.border),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.copy_rounded, size: 16, color: AppColors.textSecondary),
+                                  const SizedBox(width: 6),
+                                  Text('Copy', style: AppTypography.labelMedium.copyWith(fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: () {
+                              HapticFeedback.mediumImpact();
+                              Share.share('Join DoomScroll and earn points! Use my code: ${user.referralCode}\nhttps://doomscroll.app/ref/${user.referralCode}');
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                gradient: AppColors.primaryGradient,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.share_rounded, size: 16, color: Colors.white),
+                                  const SizedBox(width: 6),
+                                  Text('Share', style: AppTypography.labelMedium.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
+              ).animate().fadeIn(duration: 500.ms, delay: 100.ms).slideY(begin: 0.03, end: 0),
+            ),
+
+            if (pendingTotal > 0) ...[
+              SliverToBoxAdapter(child: const SizedBox(height: 16)),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: SurfaceCard(
+                    padding: const EdgeInsets.all(14),
+                    borderColor: AppColors.success.withValues(alpha: 0.2),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: AppColors.success.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.bolt_rounded, color: AppColors.success, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            '${Formatters.number(pendingTotal)} points pending! Watch an ad on each level to collect.',
+                            style: AppTypography.bodySmall.copyWith(color: AppColors.success, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ).animate().fadeIn(duration: 400.ms, delay: 200.ms),
+              ),
+            ],
+
+            SliverToBoxAdapter(child: const SizedBox(height: 28)),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text('Your Levels', style: AppTypography.headlineMedium),
+              ),
+            ),
+            SliverToBoxAdapter(child: const SizedBox(height: 12)),
+
+            if (levels.isEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(Icons.people_outline_rounded, size: 48, color: AppColors.textTertiary),
+                        const SizedBox(height: 12),
+                        Text('No referral levels yet', style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+            else
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, i) => Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
+                    child: _LevelCard(level: levels[i])
+                        .animate()
+                        .fadeIn(duration: 400.ms, delay: Duration(milliseconds: 300 + i * 100)),
+                  ),
+                  childCount: levels.length,
+                ),
               ),
 
-            const SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Text('Your Levels', style: AppTypography.headlineMedium),
+            SliverToBoxAdapter(child: const SizedBox(height: 28)),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text('How It Works', style: AppTypography.headlineMedium),
+              ),
             ),
-            const SizedBox(height: 12),
-            ...levels.map((level) => Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-              child: _LevelCard(level: level),
-            )),
+            SliverToBoxAdapter(child: const SizedBox(height: 12)),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: SurfaceCard(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      _HowItWorksRow(icon: Icons.person_rounded, title: 'Level 1 — Direct', desc: 'You earn 10% of what your direct referrals earn'),
+                      const SizedBox(height: 14),
+                      _HowItWorksRow(icon: Icons.group_rounded, title: 'Level 2 — Indirect', desc: 'You earn 5% of what their referrals earn'),
+                      const SizedBox(height: 14),
+                      _HowItWorksRow(icon: Icons.play_circle_outline_rounded, title: 'Claim via Ad', desc: 'Watch 1 ad per level to collect pending points'),
+                    ],
+                  ),
+                ),
+              ).animate().fadeIn(duration: 400.ms, delay: 500.ms),
+            ),
 
-            const SizedBox(height: 24),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Text('Top 10 Leaders', style: AppTypography.headlineMedium),
-            ),
-            const SizedBox(height: 12),
-            const _TopLeadersSection(),
-            const SizedBox(height: 20),
+            SliverToBoxAdapter(child: const SizedBox(height: 40)),
           ],
         ),
       ),
@@ -153,12 +251,10 @@ class NetworkScreen extends ConsumerWidget {
   }
 }
 
-class _StatBox extends StatelessWidget {
+class _StatPill extends StatelessWidget {
   final String value;
   final String label;
-  final bool isPoints;
-  final bool isBold;
-  const _StatBox({required this.value, required this.label, this.isPoints = false, this.isBold = false});
+  const _StatPill({required this.value, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -166,26 +262,15 @@ class _StatBox extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: isPoints ? AppColors.coinLight : AppColors.surfaceSecondary,
+          color: AppColors.surfaceMid,
           borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
         ),
         child: Column(
           children: [
-            Text(
-              value,
-              style: AppTypography.headlineMedium.copyWith(
-                color: isPoints ? AppColors.coin : AppColors.textPrimary,
-                fontWeight: (isPoints || isBold) ? FontWeight.w800 : FontWeight.w700,
-              ),
-            ),
+            Text(value, style: AppTypography.headlineSmall.copyWith(color: AppColors.textPrimary)),
             const SizedBox(height: 2),
-            Text(
-              label,
-              style: AppTypography.caption.copyWith(
-                fontWeight: isBold ? FontWeight.w700 : FontWeight.w400,
-                color: isBold ? AppColors.textPrimary : AppColors.textSecondary,
-              ),
-            ),
+            Text(label, style: AppTypography.caption),
           ],
         ),
       ),
@@ -199,21 +284,25 @@ class _LevelCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return AppCard(
-      padding: const EdgeInsets.all(16),
-      color: level.isUnlocked ? AppColors.surface : AppColors.surfaceSecondary,
+    return SurfaceCard(
+      padding: const EdgeInsets.all(18),
+      borderRadius: 16,
+      borderColor: level.pendingPoints > 0 ? AppColors.success.withValues(alpha: 0.2) : AppColors.border,
       child: Column(
         children: [
           Row(
             children: [
               Container(
-                width: 42, height: 42,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
-                  color: level.isUnlocked ? AppColors.primaryLight : AppColors.border,
-                  borderRadius: BorderRadius.circular(12),
+                  color: AppColors.primary.withValues(alpha: level.isUnlocked ? 0.1 : 0.04),
+                  borderRadius: BorderRadius.circular(13),
                 ),
-                child: Center(
-                  child: Text('L${level.level}', style: AppTypography.headlineSmall.copyWith(color: level.isUnlocked ? AppColors.primary : AppColors.textTertiary, fontSize: 14)),
+                child: Icon(
+                  level.level == 1 ? Icons.person_rounded : Icons.group_rounded,
+                  color: level.isUnlocked ? AppColors.primary : AppColors.textTertiary,
+                  size: 20,
                 ),
               ),
               const SizedBox(width: 14),
@@ -225,92 +314,81 @@ class _LevelCard extends ConsumerWidget {
                       children: [
                         Text(
                           'Level ${level.level}',
-                          style: AppTypography.headlineMedium.copyWith(color: level.isUnlocked ? AppColors.textPrimary : AppColors.textTertiary),
+                          style: AppTypography.headlineSmall.copyWith(color: level.isUnlocked ? AppColors.textPrimary : AppColors.textTertiary),
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          '${level.activeUsers} Users',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: level.isUnlocked ? AppColors.textPrimary : AppColors.textTertiary),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
+                          child: Text('${level.commissionPercent.toInt()}%', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.primary)),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 2),
-                    if (level.isUnlocked)
-                      Row(
-                        children: [
-                          Container(
-                            width: 14, height: 14,
-                            decoration: const BoxDecoration(gradient: AppColors.coinGradient, shape: BoxShape.circle),
-                            child: const Center(child: Text('M', style: TextStyle(fontSize: 7, fontWeight: FontWeight.w800, color: Colors.white))),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${level.totalCollected} points earned',
-                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.coin),
-                          ),
-                        ],
-                      )
-                    else
-                      Text(
-                        'Need ${level.requiredInvites} invites to unlock',
-                        style: AppTypography.bodySmall,
-                      ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${level.activeUsers} ${level.level == 1 ? 'direct' : 'indirect'} referrals',
+                      style: AppTypography.bodySmall,
+                    ),
+                    if (level.isUnlocked) ...[
+                      const SizedBox(height: 2),
+                      Text('${Formatters.number(level.totalCollected)} earned total', style: AppTypography.caption.copyWith(color: AppColors.textSecondary)),
+                    ],
                   ],
                 ),
               ),
             ],
           ),
-          if (level.isUnlocked && level.pendingCoins > 0) ...[
-            const SizedBox(height: 12),
+          if (level.isUnlocked && level.pendingPoints > 0) ...[
+            const SizedBox(height: 14),
             GestureDetector(
-              onTap: () {
-                HapticFeedback.mediumImpact();
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: const Text('📺 Watching ad to collect points...'),
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  margin: const EdgeInsets.all(16),
-                  duration: const Duration(seconds: 1),
-                ));
-                Future.delayed(const Duration(seconds: 1), () {
-                  final coins = ref.read(referralLevelsProvider.notifier).collectLevel(level.level);
-                  if (coins > 0) {
-                    ref.read(walletProvider.notifier).addCoins(coins, 'Level ${level.level} referral', TransactionType.referral);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text('+$coins points collected from Level ${level.level}!'),
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        margin: const EdgeInsets.all(16),
-                      ));
+              onTap: () async {
+                HapticFeedback.heavyImpact();
+                AppToast.show(context, message: 'Loading ad...', type: ToastType.info);
+                await AdService.showRewardedAd(
+                  onRewarded: () {
+                    final pts = ref.read(referralLevelsProvider.notifier).collectLevel(level.level);
+                    if (pts > 0) {
+                      ref.read(walletProvider.notifier).addPoints(pts, 'Level ${level.level} referral', TransactionType.referral);
+                      HapticFeedback.heavyImpact();
+                      if (context.mounted) {
+                        AppToast.show(context, message: '+${Formatters.number(pts)} points from Level ${level.level}!', type: ToastType.success);
+                      }
                     }
-                  }
-                });
+                  },
+                  onFailed: () {
+                    if (context.mounted) AppToast.show(context, message: 'Ad failed to load. Try again.', type: ToastType.error);
+                  },
+                );
               },
               child: Container(
-                width: double.infinity, height: 44,
-                decoration: BoxDecoration(color: AppColors.coin, borderRadius: BorderRadius.circular(12)),
+                width: double.infinity,
+                height: 44,
+                decoration: BoxDecoration(
+                  gradient: AppColors.primaryGradient,
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.play_circle_outline_rounded, color: Colors.white, size: 18),
+                    const Icon(Icons.play_circle_rounded, color: Colors.white, size: 20),
                     const SizedBox(width: 8),
-                    Text('Collect ${level.pendingCoins} Points', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white)),
+                    Text('Collect ${Formatters.number(level.pendingPoints)} pts', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
                   ],
                 ),
               ),
             ),
           ] else if (!level.isUnlocked) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             Container(
-              width: double.infinity, height: 40,
-              decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(10)),
+              width: double.infinity,
+              height: 40,
+              decoration: BoxDecoration(color: AppColors.surfaceMid, borderRadius: BorderRadius.circular(10)),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Icon(Icons.lock_outline_rounded, color: AppColors.textTertiary, size: 16),
                   const SizedBox(width: 6),
-                  Text('Locked — invite ${level.requiredInvites} friends', style: AppTypography.labelMedium.copyWith(color: AppColors.textTertiary)),
+                  Text('Invite ${level.requiredInvites} friends to unlock', style: AppTypography.labelMedium.copyWith(color: AppColors.textTertiary)),
                 ],
               ),
             ),
@@ -321,94 +399,38 @@ class _LevelCard extends ConsumerWidget {
   }
 }
 
-class _TopLeadersSection extends StatelessWidget {
-  const _TopLeadersSection();
-
-  static const _leaders = [
-    _Leader('CryptoKing', '👑', 28450, 1230),
-    _Leader('JaneFitness', '💪', 22100, 980),
-    _Leader('MaxEarner', '🚀', 19800, 870),
-    _Leader('BoostQueen', '⭐', 17650, 720),
-    _Leader('InvitePro', '🎯', 15200, 650),
-    _Leader('ActiveMike', '🏃', 12900, 540),
-    _Leader('SocialStar', '✨', 11400, 480),
-    _Leader('NetBuilder', '🔗', 9800, 410),
-    _Leader('PointMaster', '🏆', 8500, 360),
-    _Leader('AdWatcher', '📺', 7200, 290),
-  ];
+class _HowItWorksRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String desc;
+  const _HowItWorksRow({required this.icon, required this.title, required this.desc});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: AppCard(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: List.generate(_leaders.length, (i) {
-            final leader = _leaders[i];
-            final isTop3 = i < 3;
-            return Padding(
-              padding: EdgeInsets.only(bottom: i < _leaders.length - 1 ? 12 : 0),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 28,
-                    child: Text(
-                      '${i + 1}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: isTop3 ? AppColors.coin : AppColors.textTertiary,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    width: 36, height: 36,
-                    decoration: BoxDecoration(
-                      color: isTop3 ? AppColors.coinLight : AppColors.surfaceSecondary,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Center(child: Text(leader.avatar, style: const TextStyle(fontSize: 18))),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(leader.name, style: TextStyle(fontSize: 13, fontWeight: isTop3 ? FontWeight.w700 : FontWeight.w500, color: AppColors.textPrimary)),
-                        Text('Today: ${leader.dailyPoints} pts', style: AppTypography.caption.copyWith(fontSize: 11)),
-                      ],
-                    ),
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 12, height: 12,
-                        decoration: const BoxDecoration(gradient: AppColors.coinGradient, shape: BoxShape.circle),
-                        child: const Center(child: Text('M', style: TextStyle(fontSize: 6, fontWeight: FontWeight.w800, color: Colors.white))),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${leader.monthlyPoints}',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.coin),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          }),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceMid,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, size: 18, color: AppColors.textSecondary),
         ),
-      ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: AppTypography.headlineSmall),
+              const SizedBox(height: 2),
+              Text(desc, style: AppTypography.bodySmall),
+            ],
+          ),
+        ),
+      ],
     );
   }
-}
-
-class _Leader {
-  final String name;
-  final String avatar;
-  final int monthlyPoints;
-  final int dailyPoints;
-  const _Leader(this.name, this.avatar, this.monthlyPoints, this.dailyPoints);
 }

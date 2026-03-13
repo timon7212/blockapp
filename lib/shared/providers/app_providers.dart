@@ -1,24 +1,42 @@
 import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/constants/app_constants.dart';
 import '../../core/constants/economy_constants.dart';
 import '../../models/user_model.dart';
 import '../../models/wallet_model.dart';
-import '../../models/daily_stats_model.dart';
-import '../../models/streak_model.dart';
-import '../../models/mission_model.dart';
-import '../../models/blocked_app_model.dart';
+import '../../models/screen_time_model.dart';
 import '../../models/raffle_model.dart';
 import '../../models/referral_level_model.dart';
 import '../../models/gift_card_model.dart';
+import '../../models/offerwall_item_model.dart';
+import '../../models/partner_offer_model.dart';
+import '../../models/redeemed_card_model.dart';
+import '../../models/streak_model.dart';
+import '../../models/cash_out_model.dart';
 import '../../mock_data/mock_data.dart';
+import '../../services/offerwall_service.dart';
+
+// ─── Auth ───
+final authProvider = StateProvider<bool>((ref) => false);
 
 // ─── Navigation ───
 final currentTabProvider = StateProvider<int>((ref) => 0);
 final onboardingCompleteProvider = StateProvider<bool>((ref) => false);
 
 // ─── User ───
-final userProvider = StateProvider<UserModel>((ref) => MockData.user);
+final userProvider = StateNotifierProvider<UserNotifier, UserModel>(
+  (ref) => UserNotifier(),
+);
+
+class UserNotifier extends StateNotifier<UserModel> {
+  UserNotifier() : super(MockData.user);
+
+  void updateProfile({String? displayName, String? username}) {
+    state = state.copyWith(
+      displayName: displayName,
+      username: username,
+    );
+  }
+}
 
 // ─── Wallet ───
 final walletProvider = StateNotifierProvider<WalletNotifier, WalletModel>(
@@ -28,68 +46,36 @@ final walletProvider = StateNotifierProvider<WalletNotifier, WalletModel>(
 class WalletNotifier extends StateNotifier<WalletModel> {
   WalletNotifier() : super(MockData.wallet);
 
-  void addCoins(int amount, String description, TransactionType type) {
+  void addPoints(int amount, String description, TransactionType type) {
     final tx = TransactionEntry(
       id: 'tx_${DateTime.now().millisecondsSinceEpoch}',
       description: description,
-      coins: amount,
+      points: amount,
       timestamp: DateTime.now(),
       type: type,
     );
     state = state.copyWith(
-      totalCoins: state.totalCoins + amount,
-      todayCoins: state.todayCoins + amount,
+      totalPoints: state.totalPoints + amount,
+      todayEarned: state.todayEarned + amount,
       ledger: [tx, ...state.ledger],
     );
   }
 
-  void spendCoins(int amount, String description, TransactionType type) {
-    if (state.totalCoins < amount) return;
+  void spendPoints(int amount, String description, TransactionType type) {
+    if (state.totalPoints < amount) return;
     final tx = TransactionEntry(
       id: 'tx_${DateTime.now().millisecondsSinceEpoch}',
       description: description,
-      coins: -amount,
+      points: -amount,
       timestamp: DateTime.now(),
       type: type,
     );
     state = state.copyWith(
-      totalCoins: state.totalCoins - amount,
+      totalPoints: state.totalPoints - amount,
       ledger: [tx, ...state.ledger],
     );
   }
 }
-
-// ─── Daily Stats ───
-final dailyStatsProvider = StateNotifierProvider<DailyStatsNotifier, DailyStatsModel>(
-  (ref) => DailyStatsNotifier(),
-);
-
-class DailyStatsNotifier extends StateNotifier<DailyStatsModel> {
-  DailyStatsNotifier() : super(MockData.dailyStats);
-
-  void recordExercise(int reps, int coins) {
-    state = state.copyWith(
-      exercisesDone: state.exercisesDone + 1,
-      exerciseUnlocksRemaining: state.exerciseUnlocksRemaining - 1,
-      totalRepsToday: state.totalRepsToday + reps,
-      coinsEarned: state.coinsEarned + coins,
-      minutesUnlocked: state.minutesUnlocked + AppConstants.unlockDurationMinutes,
-    );
-  }
-
-  void recordAdWatch(int coins) {
-    state = state.copyWith(
-      adsWatched: state.adsWatched + 1,
-      coinsEarned: state.coinsEarned + coins,
-      minutesUnlocked: state.minutesUnlocked + AppConstants.unlockDurationMinutes,
-    );
-  }
-}
-
-// ─── Weekly Stats ───
-final weeklyStatsProvider = StateProvider<List<WeeklyStatsEntry>>(
-  (ref) => MockData.weeklyStats,
-);
 
 // ─── Streak ───
 final streakProvider = StateNotifierProvider<StreakNotifier, StreakModel>(
@@ -97,95 +83,98 @@ final streakProvider = StateNotifierProvider<StreakNotifier, StreakModel>(
 );
 
 class StreakNotifier extends StateNotifier<StreakModel> {
-  StreakNotifier() : super(MockData.streak);
+  StreakNotifier() : super(const StreakModel(currentStreak: 3, longestStreak: 12));
 
-  void markTodayComplete() {
-    if (state.completedToday) return;
-    final newStreak = state.currentStreak + 1;
+  void recordClaim() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    if (state.isActiveToday) return;
+
+    int newStreak = state.currentStreak;
+    if (state.lastClaimDate != null) {
+      final lastDate = DateTime(
+        state.lastClaimDate!.year,
+        state.lastClaimDate!.month,
+        state.lastClaimDate!.day,
+      );
+      final diff = today.difference(lastDate).inDays;
+      newStreak = diff == 1 ? state.currentStreak + 1 : 1;
+    } else {
+      newStreak = 1;
+    }
+
+    final newLongest = newStreak > state.longestStreak ? newStreak : state.longestStreak;
     state = state.copyWith(
       currentStreak: newStreak,
-      longestStreak: newStreak > state.longestStreak ? newStreak : state.longestStreak,
-      multiplier: AppConstants.getStreakMultiplier(newStreak),
-      completedToday: true,
-      lastActiveDate: DateTime.now(),
+      longestStreak: newLongest,
+      lastClaimDate: now,
+    );
+  }
+}
+
+// ─── Screen Time ───
+final screenTimeProvider = StateNotifierProvider<ScreenTimeNotifier, ScreenTimeModel>(
+  (ref) => ScreenTimeNotifier(),
+);
+
+class ScreenTimeNotifier extends StateNotifier<ScreenTimeModel> {
+  ScreenTimeNotifier() : super(MockData.screenTime);
+
+  void accumulate(int minutes) {
+    final newMin = (state.accumulatedMinutes + minutes)
+        .clamp(0, EconomyConstants.maxAccumulationMinutes);
+    state = state.copyWith(
+      accumulatedMinutes: newMin,
+      accumulatedPoints: newMin * EconomyConstants.pointsPerMinute,
+      isCapped: newMin >= EconomyConstants.maxAccumulationMinutes,
     );
   }
 
-  void activateShield() {
-    state = state.copyWith(hasShield: true);
+  int claim() {
+    final pts = state.accumulatedPoints;
+    state = const ScreenTimeModel(
+      accumulatedMinutes: 0,
+      accumulatedPoints: 0,
+      isCapped: false,
+    );
+    return pts;
   }
 }
-
-// ─── Missions (global) ───
-final missionsProvider = StateNotifierProvider<MissionsNotifier, List<MissionModel>>(
-  (ref) => MissionsNotifier(),
-);
-
-class MissionsNotifier extends StateNotifier<List<MissionModel>> {
-  MissionsNotifier() : super(MockData.missions);
-
-  void completeMission(MissionType type) {
-    state = [
-      for (final m in state)
-        if (m.type == type && !m.completed) m.copyWith(completed: true) else m,
-    ];
-  }
-
-  int get completedCount => state.where((m) => m.completed).length;
-  bool get raffleEligible => completedCount >= AppConstants.dailyMissionsRequired;
-}
-
-final missionsCompletedCountProvider = Provider<int>((ref) {
-  return ref.watch(missionsProvider).where((m) => m.completed).length;
-});
-
-final raffleEligibleProvider = Provider<bool>((ref) {
-  return ref.watch(missionsCompletedCountProvider) >= AppConstants.dailyMissionsRequired;
-});
-
-// ─── Per-raffle missions ───
-final raffleMissionsProvider = Provider.family<List<MissionModel>, RaffleType>((ref, type) {
-  final base = ref.watch(missionsProvider);
-  switch (type) {
-    case RaffleType.daily:
-      return [
-        base.firstWhere((m) => m.type == MissionType.watchAd, orElse: () => base.first),
-        base.firstWhere((m) => m.type == MissionType.exercise, orElse: () => base.first),
-      ];
-    case RaffleType.weekly:
-      return [
-        base.firstWhere((m) => m.type == MissionType.watchAd, orElse: () => base.first),
-        base.firstWhere((m) => m.type == MissionType.exercise, orElse: () => base.first),
-        base.firstWhere((m) => m.type == MissionType.spinWheel, orElse: () => base.first),
-        base.firstWhere((m) => m.type == MissionType.inviteFriend, orElse: () => base.first),
-      ];
-    case RaffleType.monthly:
-      return base;
-  }
-});
-
-// ─── Blocked Apps ───
-final blockedAppsProvider = StateNotifierProvider<BlockedAppsNotifier, List<BlockedAppModel>>(
-  (ref) => BlockedAppsNotifier(),
-);
-
-class BlockedAppsNotifier extends StateNotifier<List<BlockedAppModel>> {
-  BlockedAppsNotifier() : super(MockData.blockedApps);
-
-  void toggleApp(String id) {
-    state = [
-      for (final app in state)
-        if (app.id == id) app.copyWith(isActive: !app.isActive) else app,
-    ];
-  }
-}
-
-final activeBlockedAppsCount = Provider<int>((ref) {
-  return ref.watch(blockedAppsProvider).where((a) => a.isActive).length;
-});
 
 // ─── Raffles ───
-final rafflesProvider = StateProvider<List<RaffleModel>>((ref) => MockData.raffles);
+final rafflesProvider = StateNotifierProvider<RafflesNotifier, List<RaffleModel>>(
+  (ref) => RafflesNotifier(),
+);
+
+class RafflesNotifier extends StateNotifier<List<RaffleModel>> {
+  RafflesNotifier() : super(MockData.raffles);
+
+  void completeTask(String raffleId, String taskId) {
+    state = [
+      for (final r in state)
+        if (r.id == raffleId)
+          r.copyWith(
+            entryTasks: [
+              for (final t in r.entryTasks)
+                if (t.id == taskId && !t.isCompleted)
+                  t.copyWith(currentCount: t.currentCount + 1)
+                else
+                  t,
+            ],
+          )
+        else
+          r,
+    ];
+  }
+
+  void enterRaffle(String raffleId) {
+    state = [
+      for (final r in state)
+        if (r.id == raffleId) r.copyWith(isEntered: true) else r,
+    ];
+  }
+}
 
 // ─── Referral Network ───
 final referralLevelsProvider = StateNotifierProvider<ReferralLevelsNotifier, List<ReferralLevelModel>>(
@@ -197,36 +186,94 @@ class ReferralLevelsNotifier extends StateNotifier<List<ReferralLevelModel>> {
 
   int collectLevel(int level) {
     final idx = state.indexWhere((l) => l.level == level);
-    if (idx == -1 || state[idx].pendingCoins == 0) return 0;
-    final coins = state[idx].pendingCoins;
+    if (idx == -1 || state[idx].pendingPoints == 0) return 0;
+    final pts = state[idx].pendingPoints;
     state = [
       for (int i = 0; i < state.length; i++)
         if (i == idx)
           state[i].copyWith(
-            pendingCoins: 0,
-            totalCollected: state[i].totalCollected + coins,
+            pendingPoints: 0,
+            totalCollected: state[i].totalCollected + pts,
+            adWatchedToClaim: true,
           )
         else
           state[i],
     ];
-    return coins;
+    return pts;
   }
 }
 
-final totalPendingReferralCoins = Provider<int>((ref) {
-  return ref.watch(referralLevelsProvider).fold(0, (sum, l) => sum + l.pendingCoins);
+final totalPendingReferralPoints = Provider<int>((ref) {
+  return ref.watch(referralLevelsProvider).fold(0, (sum, l) => sum + l.pendingPoints);
 });
 
 // ─── Gift Cards ───
 final giftCardsProvider = StateProvider<List<GiftCardModel>>((ref) => MockData.giftCards);
 
-// ─── Spin Wheel ───
-final spinsRemainingProvider = StateProvider<int>((ref) => 5);
+// ─── Redeemed Cards ───
+final redeemedCardsProvider = StateNotifierProvider<RedeemedCardsNotifier, List<RedeemedCardModel>>(
+  (ref) => RedeemedCardsNotifier(),
+);
 
+class RedeemedCardsNotifier extends StateNotifier<List<RedeemedCardModel>> {
+  RedeemedCardsNotifier() : super([]);
+
+  void add(RedeemedCardModel card) {
+    state = [card, ...state];
+  }
+}
+
+// ─── Partner Offers ───
+final partnerOffersProvider = StateProvider<List<PartnerOfferModel>>((ref) => MockData.partnerOffers);
+
+// ─── Offerwall ───
+final offerwallProvider = StateNotifierProvider<OfferwallNotifier, List<OfferwallItemModel>>(
+  (ref) => OfferwallNotifier(),
+);
+
+class OfferwallNotifier extends StateNotifier<List<OfferwallItemModel>> {
+  OfferwallNotifier() : super(OfferwallService.getOffers());
+
+  void startOffer(String id) {
+    state = [
+      for (final o in state)
+        if (o.id == id) o.copyWith(status: OfferStatus.inProgress) else o,
+    ];
+  }
+
+  void completeOffer(String id) {
+    state = [
+      for (final o in state)
+        if (o.id == id) o.copyWith(status: OfferStatus.completed) else o,
+    ];
+  }
+}
+
+// ─── Cash Out Requests ───
+final cashOutRequestsProvider = StateNotifierProvider<CashOutNotifier, List<CashOutRequest>>(
+  (ref) => CashOutNotifier(),
+);
+
+class CashOutNotifier extends StateNotifier<List<CashOutRequest>> {
+  CashOutNotifier() : super([]);
+
+  void add(CashOutRequest req) {
+    state = [req, ...state];
+  }
+}
+
+// ─── Spin Wheel ───
+final spinsRemainingProvider = StateProvider<int>((ref) => EconomyConstants.maxSpinsPerDay);
 final spinResultProvider = StateProvider<int?>((ref) => null);
 
-int generateSpinResult() {
+int generateWeightedSpinResult() {
   final rng = Random();
-  return EconomyConstants.spinWheelRewards[
-      rng.nextInt(EconomyConstants.spinWheelRewards.length)];
+  const prizes = EconomyConstants.spinWheelPrizes;
+  final totalWeight = prizes.fold<int>(0, (sum, p) => sum + p.weight);
+  var roll = rng.nextInt(totalWeight);
+  for (final prize in prizes) {
+    roll -= prize.weight;
+    if (roll < 0) return prize.value;
+  }
+  return prizes.last.value;
 }

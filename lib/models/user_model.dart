@@ -6,8 +6,8 @@ class UserModel {
   final String referralCode;
   final int directInvites;
   final DateTime joinedAt;
-  final ExerciseType preferredExercise;
-  final int exerciseDifficulty;
+  final int totalPointsEarned;
+  final String? authProvider;
 
   const UserModel({
     required this.id,
@@ -17,8 +17,8 @@ class UserModel {
     required this.referralCode,
     this.directInvites = 0,
     required this.joinedAt,
-    this.preferredExercise = ExerciseType.pushUps,
-    this.exerciseDifficulty = 10,
+    this.totalPointsEarned = 0,
+    this.authProvider,
   });
 
   UserModel copyWith({
@@ -26,8 +26,8 @@ class UserModel {
     String? displayName,
     String? avatarUrl,
     int? directInvites,
-    ExerciseType? preferredExercise,
-    int? exerciseDifficulty,
+    int? totalPointsEarned,
+    String? authProvider,
   }) {
     return UserModel(
       id: id,
@@ -37,18 +37,8 @@ class UserModel {
       referralCode: referralCode,
       directInvites: directInvites ?? this.directInvites,
       joinedAt: joinedAt,
-      preferredExercise: preferredExercise ?? this.preferredExercise,
-      exerciseDifficulty: exerciseDifficulty ?? this.exerciseDifficulty,
+      totalPointsEarned: totalPointsEarned ?? this.totalPointsEarned,
+      authProvider: authProvider ?? this.authProvider,
     );
   }
-}
-
-enum ExerciseType {
-  pushUps('Push-ups', '🏋️'),
-  squats('Squats', '🦵'),
-  sitUps('Sit-ups', '💪');
-
-  final String label;
-  final String emoji;
-  const ExerciseType(this.label, this.emoji);
 }

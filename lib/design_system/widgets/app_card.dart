@@ -3,47 +3,41 @@ import '../colors/app_colors.dart';
 
 class AppCard extends StatelessWidget {
   final Widget child;
-  final EdgeInsetsGeometry? padding;
-  final EdgeInsetsGeometry? margin;
-  final double borderRadius;
+  final EdgeInsetsGeometry padding;
   final Color? color;
   final Color? borderColor;
+  final double borderRadius;
+  final List<BoxShadow>? boxShadow;
   final VoidCallback? onTap;
 
   const AppCard({
     super.key,
     required this.child,
-    this.padding,
-    this.margin,
-    this.borderRadius = 16,
+    this.padding = const EdgeInsets.all(16),
     this.color,
     this.borderColor,
+    this.borderRadius = 24,
+    this.boxShadow,
     this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final card = Container(
-      padding: padding ?? const EdgeInsets.all(16),
-      margin: margin,
-      decoration: BoxDecoration(
-        color: color ?? AppColors.surface,
-        borderRadius: BorderRadius.circular(borderRadius),
-        border: borderColor != null
-            ? Border.all(color: borderColor!, width: 1.5)
-            : null,
-        boxShadow: AppColors.cardShadow,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: padding,
+        decoration: BoxDecoration(
+          color: color ?? AppColors.surface,
+          borderRadius: BorderRadius.circular(borderRadius),
+          border: Border.all(
+            color: borderColor ?? AppColors.border,
+            width: 0.5,
+          ),
+          boxShadow: boxShadow,
+        ),
+        child: child,
       ),
-      child: child,
     );
-
-    if (onTap != null) {
-      return GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: card,
-      );
-    }
-    return card;
   }
 }

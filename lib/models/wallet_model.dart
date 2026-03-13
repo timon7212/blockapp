@@ -1,26 +1,26 @@
 class WalletModel {
-  final int totalCoins;
-  final int todayCoins;
-  final int todayNetworkCoins;
+  final int totalPoints;
+  final int pendingPoints;
+  final int todayEarned;
   final List<TransactionEntry> ledger;
 
   const WalletModel({
-    this.totalCoins = 0,
-    this.todayCoins = 0,
-    this.todayNetworkCoins = 0,
+    this.totalPoints = 0,
+    this.pendingPoints = 0,
+    this.todayEarned = 0,
     this.ledger = const [],
   });
 
   WalletModel copyWith({
-    int? totalCoins,
-    int? todayCoins,
-    int? todayNetworkCoins,
+    int? totalPoints,
+    int? pendingPoints,
+    int? todayEarned,
     List<TransactionEntry>? ledger,
   }) {
     return WalletModel(
-      totalCoins: totalCoins ?? this.totalCoins,
-      todayCoins: todayCoins ?? this.todayCoins,
-      todayNetworkCoins: todayNetworkCoins ?? this.todayNetworkCoins,
+      totalPoints: totalPoints ?? this.totalPoints,
+      pendingPoints: pendingPoints ?? this.pendingPoints,
+      todayEarned: todayEarned ?? this.todayEarned,
       ledger: ledger ?? this.ledger,
     );
   }
@@ -29,28 +29,25 @@ class WalletModel {
 class TransactionEntry {
   final String id;
   final String description;
-  final int coins;
+  final int points;
   final DateTime timestamp;
   final TransactionType type;
 
   const TransactionEntry({
     required this.id,
     required this.description,
-    required this.coins,
+    required this.points,
     required this.timestamp,
     required this.type,
   });
 }
 
 enum TransactionType {
-  exerciseUnlock,
-  adUnlock,
+  screenTimeClaim,
   spinWheel,
-  task,
-  survey,
+  offerwall,
   referral,
-  missionBonus,
+  rafflePrize,
   giftCardPurchase,
   cashOut,
-  donation,
 }

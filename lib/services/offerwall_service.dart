@@ -1,59 +1,99 @@
-/// Stub for 3rd-party offerwall, survey, and task integrations.
-///
-/// In production, integrate with:
-/// - Tapjoy (offerwall + tasks)
-/// - IronSource (offerwall)
-/// - Pollfish (surveys)
-/// - Cint / Lucid (surveys)
-///
-/// Each integration requires:
-/// 1. SDK dependency in pubspec.yaml
-/// 2. Native setup (API keys in Info.plist / AndroidManifest)
-/// 3. Callback handling for completion/reward
+import 'package:flutter/material.dart';
+import '../models/offerwall_item_model.dart';
+
 class OfferwallService {
-  static bool _initialized = false;
+  static List<OfferwallItemModel> getOffers() => _mockOffers;
 
-  static Future<void> initialize() async {
-    // TODO: Initialize Tapjoy, IronSource, Pollfish SDKs
-    _initialized = true;
-  }
-
-  static bool get isInitialized => _initialized;
-
-  /// Shows the Tapjoy/IronSource offerwall.
-  /// Returns the number of coins earned, or 0 if cancelled.
-  static Future<int> showOfferwall() async {
-    // TODO: Tapjoy.showOfferwall() or IronSource.showOfferwall()
-    return 0;
-  }
-
-  /// Opens a Pollfish survey.
-  /// Returns coins earned on completion, or 0 if no survey available.
-  static Future<int> showSurvey() async {
-    // TODO: Pollfish.show()
-    return 0;
-  }
-
-  /// Checks if a survey is available.
-  static Future<bool> isSurveyAvailable() async {
-    // TODO: Pollfish.isReady()
-    return false;
-  }
-
-  /// Shows a task from the offerwall.
-  /// Returns coins earned on completion.
-  static Future<int> showTask() async {
-    // TODO: Open task detail via Tapjoy
-    return 0;
-  }
-
-  /// Checks if the offerwall has available offers.
-  static Future<bool> hasAvailableOffers() async {
-    // TODO: Check SDK availability
-    return false;
-  }
-
-  static void dispose() {
-    _initialized = false;
-  }
+  static const _mockOffers = [
+    OfferwallItemModel(
+      id: 'offer_raid',
+      title: 'RAID: Shadow Legends',
+      description: 'Install & reach level 10',
+      icon: Icons.shield_rounded,
+      rewardPoints: 4500,
+      type: OfferType.reachLevel,
+      actionUrl: 'https://example.com/raid',
+    ),
+    OfferwallItemModel(
+      id: 'offer_cashapp',
+      title: 'Cash App',
+      description: 'Sign up & send first payment',
+      icon: Icons.account_balance_wallet_rounded,
+      rewardPoints: 3200,
+      type: OfferType.register,
+      actionUrl: 'https://example.com/cashapp',
+    ),
+    OfferwallItemModel(
+      id: 'offer_temu',
+      title: 'Temu',
+      description: 'Install & make first purchase',
+      icon: Icons.shopping_bag_rounded,
+      rewardPoints: 2800,
+      type: OfferType.installApp,
+      actionUrl: 'https://example.com/temu',
+    ),
+    OfferwallItemModel(
+      id: 'offer_evony',
+      title: 'Evony',
+      description: 'Install & upgrade castle to Lv.15',
+      icon: Icons.castle_rounded,
+      rewardPoints: 6000,
+      type: OfferType.reachLevel,
+      actionUrl: 'https://example.com/evony',
+    ),
+    OfferwallItemModel(
+      id: 'offer_nord',
+      title: 'NordVPN',
+      description: 'Subscribe to any plan',
+      icon: Icons.vpn_lock_rounded,
+      rewardPoints: 5500,
+      type: OfferType.subscribe,
+      actionUrl: 'https://example.com/nord',
+    ),
+    OfferwallItemModel(
+      id: 'offer_coinmaster',
+      title: 'Coin Master',
+      description: 'Install & complete village 5',
+      icon: Icons.monetization_on_rounded,
+      rewardPoints: 3800,
+      type: OfferType.reachLevel,
+      actionUrl: 'https://example.com/coinmaster',
+    ),
+    OfferwallItemModel(
+      id: 'offer_survey1',
+      title: 'Quick Survey',
+      description: 'Answer 10 questions (~3 min)',
+      icon: Icons.poll_rounded,
+      rewardPoints: 500,
+      type: OfferType.survey,
+      actionUrl: 'https://example.com/survey',
+    ),
+    OfferwallItemModel(
+      id: 'offer_survey2',
+      title: 'Shopping Habits',
+      description: 'Share your preferences (~5 min)',
+      icon: Icons.bar_chart_rounded,
+      rewardPoints: 800,
+      type: OfferType.survey,
+      actionUrl: 'https://example.com/survey2',
+    ),
+    OfferwallItemModel(
+      id: 'offer_survey3',
+      title: 'Tech Usage Study',
+      description: 'About your devices & apps (~7 min)',
+      icon: Icons.insights_rounded,
+      rewardPoints: 1200,
+      type: OfferType.survey,
+      actionUrl: 'https://example.com/survey3',
+    ),
+    OfferwallItemModel(
+      id: 'offer_revolut',
+      title: 'Revolut',
+      description: 'Open account & order card',
+      icon: Icons.credit_card_rounded,
+      rewardPoints: 4200,
+      type: OfferType.register,
+      actionUrl: 'https://example.com/revolut',
+    ),
+  ];
 }

@@ -1,31 +1,42 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../colors/app_colors.dart';
 import '../typography/app_typography.dart';
 
 class SectionHeader extends StatelessWidget {
   final String title;
-  final Widget? trailing;
-  final EdgeInsetsGeometry padding;
+  final String? actionText;
+  final VoidCallback? onAction;
 
   const SectionHeader({
     super.key,
     required this.title,
-    this.trailing,
-    this.padding = const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+    this.actionText,
+    this.onAction,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: padding,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         children: [
-          Expanded(
-            child: Text(
-              title.toUpperCase(),
-              style: AppTypography.sectionHeader,
+          Text(title, style: AppTypography.headlineMedium),
+          const Spacer(),
+          if (actionText != null)
+            GestureDetector(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                onAction?.call();
+              },
+              child: Text(
+                actionText!,
+                style: AppTypography.labelMedium.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
-          ),
-          if (trailing != null) trailing!,
         ],
       ),
     );

@@ -1,52 +1,49 @@
 import 'package:flutter/material.dart';
+import '../../core/utils/formatters.dart';
 import '../colors/app_colors.dart';
-import '../typography/app_typography.dart';
 
 class CoinBadge extends StatelessWidget {
   final int amount;
   final double fontSize;
-  final bool showPlus;
 
   const CoinBadge({
     super.key,
     required this.amount,
-    this.fontSize = 15,
-    this.showPlus = false,
+    this.fontSize = 14,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: fontSize + 4,
-          height: fontSize + 4,
-          decoration: const BoxDecoration(
-            gradient: AppColors.coinGradient,
-            shape: BoxShape.circle,
-          ),
-          child: Center(
-            child: Text(
-              'M',
-              style: TextStyle(
-                fontSize: fontSize * 0.6,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-              ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMid,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border, width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: fontSize * 0.85,
+            height: fontSize * 0.85,
+            decoration: BoxDecoration(
+              color: AppColors.textPrimary,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.textTertiary, width: 1),
             ),
           ),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          '${showPlus ? '+' : ''}$amount',
-          style: AppTypography.labelLarge.copyWith(
-            fontSize: fontSize,
-            color: AppColors.coin,
-            fontWeight: FontWeight.w700,
+          SizedBox(width: fontSize * 0.4),
+          Text(
+            Formatters.points(amount),
+            style: TextStyle(
+              fontSize: fontSize,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

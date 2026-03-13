@@ -1,14 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/providers/app_providers.dart';
 import '../../design_system/colors/app_colors.dart';
 import '../../design_system/typography/app_typography.dart';
-import '../../design_system/widgets/app_card.dart';
-import '../../design_system/widgets/setting_tile.dart';
-import '../../design_system/widgets/section_header.dart';
-import '../../design_system/widgets/coin_badge.dart';
-import '../../models/user_model.dart';
+import '../../design_system/widgets/surface_card.dart';
+import '../../design_system/widgets/gradient_background.dart';
+import '../../core/utils/formatters.dart';
+import '../../models/wallet_model.dart';
+import '../../models/streak_model.dart';
+import '../../design_system/utils/app_page_route.dart';
+import '../settings/notifications_screen.dart';
+import '../settings/help_screen.dart';
+import '../settings/about_screen.dart';
+import 'edit_profile_screen.dart';
+import 'transaction_history_screen.dart';
+import '../store/my_cards_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -17,532 +25,429 @@ class ProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(userProvider);
     final wallet = ref.watch(walletProvider);
+    final redeemed = ref.watch(redeemedCardsProvider);
+    final streak = ref.watch(streakProvider);
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-              child: Text('Profile', style: AppTypography.displaySmall),
+    return GradientBackground(
+      child: SafeArea(
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                child: Text('Profile', style: AppTypography.displaySmall),
+              ).animate().fadeIn(duration: 400.ms),
             ),
+            SliverToBoxAdapter(child: const SizedBox(height: 28)),
 
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: AppCard(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryLight,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Center(
-                        child: Text(
-                          user.displayName.isNotEmpty
-                              ? user.displayName[0].toUpperCase()
-                              : '?',
-                          style: AppTypography.headlineLarge.copyWith(
-                            color: AppColors.primary,
-                          ),
-                        ),
+            SliverToBoxAdapter(
+              child: Column(
+                children: [
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Center(
+                      child: Text(
+                        user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : 'U',
+                        style: AppTypography.displayLarge.copyWith(color: AppColors.primary, fontSize: 32),
                       ),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  ),
+                  const SizedBox(height: 14),
+                  Text(user.displayName, style: AppTypography.headlineLarge),
+                  const SizedBox(height: 4),
+                  Text('@${user.username}', style: AppTypography.bodyMedium),
+                  const SizedBox(height: 4),
+                  Text('Member since ${_formatDate(user.joinedAt)}', style: AppTypography.caption),
+                ],
+              ).animate().fadeIn(duration: 500.ms, delay: 100.ms),
+            ),
+            SliverToBoxAdapter(child: const SizedBox(height: 28)),
+
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  children: [
+                    _ProfileStat(label: 'Total Earned', value: Formatters.points(user.totalPointsEarned), icon: Icons.trending_up_rounded),
+                    const SizedBox(width: 10),
+                    _ProfileStat(label: 'Streak', value: '${streak.currentStreak}d', icon: Icons.local_fire_department_rounded),
+                    const SizedBox(width: 10),
+                    _ProfileStat(label: 'Invites', value: '${user.directInvites}', icon: Icons.person_add_outlined),
+                  ],
+                ),
+              ).animate().fadeIn(duration: 500.ms, delay: 200.ms),
+            ),
+            SliverToBoxAdapter(child: const SizedBox(height: 16)),
+
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: _StreakMultiplierCard(streak: streak),
+              ).animate().fadeIn(duration: 500.ms, delay: 250.ms),
+            ),
+            SliverToBoxAdapter(child: const SizedBox(height: 28)),
+
+            if (redeemed.isNotEmpty) ...[
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: GestureDetector(
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      Navigator.of(context).push(AppPageRoute(page: const MyCardsScreen()));
+                    },
+                    child: SurfaceCard(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      child: Row(
                         children: [
-                          Text(user.displayName, style: AppTypography.headlineLarge),
-                          const SizedBox(height: 4),
-                          CoinBadge(amount: wallet.totalCoins),
+                          Icon(Icons.credit_card_rounded, color: AppColors.success, size: 20),
+                          const SizedBox(width: 12),
+                          Text('My Gift Cards', style: AppTypography.headlineSmall),
+                          const Spacer(),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppColors.success.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text('${redeemed.length}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.success)),
+                          ),
+                          const SizedBox(width: 8),
+                          const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary, size: 20),
                         ],
                       ),
                     ),
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(child: const SizedBox(height: 20)),
+            ],
+
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  children: [
+                    Text('Recent Activity', style: AppTypography.headlineMedium),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        Navigator.of(context).push(AppPageRoute(page: const TransactionHistoryScreen()));
+                      },
+                      child: Text('View All', style: AppTypography.labelMedium.copyWith(color: AppColors.primary)),
+                    ),
                   ],
+                ),
+              ).animate().fadeIn(duration: 400.ms, delay: 300.ms),
+            ),
+            SliverToBoxAdapter(child: const SizedBox(height: 12)),
+            wallet.ledger.isEmpty
+                ? SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: SurfaceCard(
+                        padding: const EdgeInsets.all(32),
+                        child: Column(
+                          children: [
+                            Icon(Icons.bar_chart_rounded, size: 40, color: AppColors.textTertiary),
+                            const SizedBox(height: 8),
+                            Text('No activity yet', style: AppTypography.bodyMedium),
+                            Text('Start earning to see your history', style: AppTypography.bodySmall),
+                          ],
+                        ),
+                      ),
+                    ),
+                  )
+                : SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, i) {
+                        final tx = wallet.ledger[i];
+                        return Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 0, 24, 6),
+                          child: _TransactionRow(tx: tx)
+                              .animate()
+                              .fadeIn(duration: 300.ms, delay: Duration(milliseconds: 350 + i * 50)),
+                        );
+                      },
+                      childCount: wallet.ledger.length.clamp(0, 5),
+                    ),
+                  ),
+            SliverToBoxAdapter(child: const SizedBox(height: 28)),
+
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text('Settings', style: AppTypography.headlineMedium),
+              ),
+            ),
+            SliverToBoxAdapter(child: const SizedBox(height: 12)),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: SurfaceCard(
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    children: [
+                      _SettingTile(
+                        icon: Icons.person_outline_rounded,
+                        label: 'Edit Profile',
+                        onTap: () => Navigator.of(context).push(AppPageRoute(page: const EditProfileScreen())),
+                      ),
+                      Divider(height: 1, color: AppColors.border, indent: 52),
+                      _SettingTile(
+                        icon: Icons.notifications_outlined,
+                        label: 'Notifications',
+                        onTap: () => Navigator.of(context).push(AppPageRoute(page: const NotificationsScreen())),
+                      ),
+                      Divider(height: 1, color: AppColors.border, indent: 52),
+                      _SettingTile(
+                        icon: Icons.help_outline_rounded,
+                        label: 'Help & Support',
+                        onTap: () => Navigator.of(context).push(AppPageRoute(page: const HelpScreen())),
+                      ),
+                      Divider(height: 1, color: AppColors.border, indent: 52),
+                      _SettingTile(
+                        icon: Icons.info_outline_rounded,
+                        label: 'About',
+                        onTap: () => Navigator.of(context).push(AppPageRoute(page: const AboutScreen())),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-
-            const SizedBox(height: 28),
-            const SectionHeader(title: 'Settings'),
-            const SizedBox(height: 8),
-
-            _buildSettingsSection(context, ref, user),
-
-            const SizedBox(height: 28),
-            const SectionHeader(title: 'Account'),
-            const SizedBox(height: 8),
-
-            _buildAccountSection(context, ref),
-
-            const SizedBox(height: 40),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Text(
-                'Version 1.0.0',
-                textAlign: TextAlign.center,
-                style: AppTypography.caption,
-              ),
-            ),
-            const SizedBox(height: 20),
+            SliverToBoxAdapter(child: const SizedBox(height: 16)),
+            SliverToBoxAdapter(child: Center(child: Text('v2.1.0', style: AppTypography.caption))),
+            SliverToBoxAdapter(child: const SizedBox(height: 40)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSettingsSection(BuildContext context, WidgetRef ref, UserModel user) {
-    final blockedApps = ref.watch(blockedAppsProvider);
-    final activeCount = blockedApps.where((a) => a.isActive).length;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        children: [
-          SettingTile(
-            leading: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.primaryLight,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.block_rounded, color: AppColors.primary, size: 22),
-            ),
-            title: 'Blocked Apps',
-            subtitle: '$activeCount apps active',
-            onTap: () => _showBlockedAppsSheet(context, ref),
-          ),
-          const SizedBox(height: 10),
-          SettingTile(
-            leading: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.greenLight,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                user.preferredExercise.emoji,
-                style: const TextStyle(fontSize: 20),
-                textAlign: TextAlign.center,
-              ),
-            ),
-            title: 'Exercise Type',
-            subtitle: user.preferredExercise.label,
-            onTap: () => _showExercisePicker(context, ref),
-          ),
-          const SizedBox(height: 10),
-          SettingTile(
-            leading: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.coinLight,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.fitness_center_rounded, color: AppColors.coin, size: 22),
-            ),
-            title: 'Exercise Difficulty',
-            subtitle: '${user.exerciseDifficulty} reps per unlock',
-            onTap: () => _showDifficultyPicker(context, ref),
-          ),
-          const SizedBox(height: 10),
-          SettingTile(
-            leading: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.surfaceSecondary,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.language_rounded, color: AppColors.textSecondary, size: 22),
-            ),
-            title: 'Language',
-            subtitle: 'English',
-            onTap: () {},
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAccountSection(BuildContext context, WidgetRef ref) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        children: [
-          SettingTile(
-            leading: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.surfaceSecondary,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.person_outline_rounded, color: AppColors.textSecondary, size: 22),
-            ),
-            title: 'Manage Account',
-            subtitle: 'Account settings & preferences',
-            onTap: () => _showManageAccount(context),
-          ),
-          const SizedBox(height: 10),
-          SettingTile(
-            leading: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.redLight,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.logout_rounded, color: AppColors.red, size: 22),
-            ),
-            title: 'Sign Out',
-            subtitle: 'Sign out of your account',
-            titleColor: AppColors.red,
-            trailing: const SizedBox.shrink(),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Sign out not available in demo')),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showBlockedAppsSheet(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => _BlockedAppsSheet(),
-    );
-  }
-
-  void _showExercisePicker(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => _ExercisePickerSheet(),
-    );
-  }
-
-  void _showDifficultyPicker(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => _DifficultyPickerSheet(),
-    );
-  }
-
-  void _showManageAccount(BuildContext context) {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => const _ManageAccountScreen(),
-    ));
+  String _formatDate(DateTime dt) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[dt.month - 1]} ${dt.year}';
   }
 }
 
-class _BlockedAppsSheet extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final apps = ref.watch(blockedAppsProvider);
-    final activeCount = apps.where((a) => a.isActive).length;
+class _StreakMultiplierCard extends StatelessWidget {
+  final StreakModel streak;
+  const _StreakMultiplierCard({required this.streak});
 
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(
-              color: AppColors.border,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text('Blocked Apps', style: AppTypography.headlineLarge),
-          const SizedBox(height: 4),
-          Text('$activeCount apps active', style: AppTypography.bodyMedium),
-          const SizedBox(height: 20),
-          ...apps.map((app) => Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: GestureDetector(
-              onTap: () {
-                HapticFeedback.selectionClick();
-                ref.read(blockedAppsProvider.notifier).toggleApp(app.id);
-              },
-              behavior: HitTestBehavior.opaque,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: app.isActive ? AppColors.primaryLight : AppColors.surfaceSecondary,
-                  borderRadius: BorderRadius.circular(12),
-                  border: app.isActive
-                      ? Border.all(color: AppColors.primary.withOpacity(0.3))
-                      : null,
-                ),
-                child: Row(
-                  children: [
-                    Text(app.iconEmoji, style: const TextStyle(fontSize: 24)),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Text(app.name, style: AppTypography.headlineMedium),
-                    ),
-                    if (app.isActive)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.green,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          'ACTIVE',
-                          style: AppTypography.labelSmall.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          )),
-          const SizedBox(height: 20),
-        ],
-      ),
-    );
-  }
-}
-
-class _ExercisePickerSheet extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(userProvider);
-
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(
-              color: AppColors.border,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text('Choose Exercise', style: AppTypography.headlineLarge),
-          const SizedBox(height: 20),
-          ...ExerciseType.values.map((type) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: GestureDetector(
-              onTap: () {
-                HapticFeedback.selectionClick();
-                ref.read(userProvider.notifier).state =
-                    user.copyWith(preferredExercise: type);
-                Navigator.pop(context);
-              },
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: user.preferredExercise == type
-                      ? AppColors.primaryLight
-                      : AppColors.surfaceSecondary,
-                  borderRadius: BorderRadius.circular(14),
-                  border: user.preferredExercise == type
-                      ? Border.all(color: AppColors.primary, width: 2)
-                      : null,
-                ),
-                child: Row(
-                  children: [
-                    Text(type.emoji, style: const TextStyle(fontSize: 28)),
-                    const SizedBox(width: 16),
-                    Text(type.label, style: AppTypography.headlineMedium),
-                    const Spacer(),
-                    if (user.preferredExercise == type)
-                      const Icon(Icons.check_circle_rounded, color: AppColors.primary),
-                  ],
-                ),
-              ),
-            ),
-          )),
-          const SizedBox(height: 10),
-        ],
-      ),
-    );
-  }
-}
-
-class _DifficultyPickerSheet extends ConsumerWidget {
-  static const _options = [5, 10, 15, 20, 25, 30];
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(userProvider);
-
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(
-              color: AppColors.border,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text('Reps per Unlock', style: AppTypography.headlineLarge),
-          const SizedBox(height: 20),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: _options.map((reps) {
-              final selected = user.exerciseDifficulty == reps;
-              return GestureDetector(
-                onTap: () {
-                  HapticFeedback.selectionClick();
-                  ref.read(userProvider.notifier).state =
-                      user.copyWith(exerciseDifficulty: reps);
-                  Navigator.pop(context);
-                },
-                child: Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    color: selected ? AppColors.primary : AppColors.surfaceSecondary,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Center(
-                    child: Text(
-                      '$reps',
-                      style: AppTypography.headlineLarge.copyWith(
-                        color: selected ? Colors.white : AppColors.textPrimary,
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 24),
-        ],
-      ),
-    );
-  }
-}
-
-class _ManageAccountScreen extends StatelessWidget {
-  const _ManageAccountScreen();
+  static const _tiers = [
+    (days: 0, label: '1x', multiplier: 1.0),
+    (days: 3, label: '1.1x', multiplier: 1.1),
+    (days: 7, label: '1.2x', multiplier: 1.2),
+    (days: 14, label: '1.3x', multiplier: 1.3),
+    (days: 30, label: '1.5x', multiplier: 1.5),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceSecondary,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Icon(Icons.arrow_back_rounded, size: 20),
+    return SurfaceCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(Icons.local_fire_department_rounded, color: AppColors.warning, size: 20),
+              const SizedBox(width: 10),
+              Text('Streak Multiplier', style: AppTypography.headlineSmall),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
+                ),
+                child: Text(
+                  streak.multiplierLabel,
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.accent),
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-              child: Text('Manage Account', style: AppTypography.displaySmall),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: _tiers.map((tier) {
+              final isActive = streak.multiplier >= tier.multiplier;
+              final isCurrent = streak.multiplier == tier.multiplier;
+              return Column(
                 children: [
-                  SettingTile(
-                    leading: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: AppColors.redLight,
-                        borderRadius: BorderRadius.circular(10),
+                  Container(
+                    width: 40,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: isCurrent
+                          ? AppColors.accent.withValues(alpha: 0.15)
+                          : isActive
+                              ? AppColors.success.withValues(alpha: 0.1)
+                              : AppColors.surfaceLight,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isCurrent
+                            ? AppColors.accent.withValues(alpha: 0.4)
+                            : isActive
+                                ? AppColors.success.withValues(alpha: 0.2)
+                                : AppColors.border,
                       ),
-                      child: const Icon(Icons.delete_outline_rounded, color: AppColors.red, size: 22),
                     ),
-                    title: 'Delete Account',
-                    titleColor: AppColors.red,
-                    trailing: const SizedBox.shrink(),
-                    onTap: () {},
+                    child: Center(
+                      child: Text(
+                        tier.label,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isCurrent ? AppColors.accent : isActive ? AppColors.success : AppColors.textTertiary,
+                        ),
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 10),
-                  SettingTile(
-                    leading: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryLight,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.description_outlined, color: AppColors.primary, size: 22),
+                  const SizedBox(height: 4),
+                  Text(
+                    tier.days == 0 ? 'Start' : '${tier.days}d',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: isCurrent ? AppColors.accent : AppColors.textTertiary,
                     ),
-                    title: 'Terms of Use',
-                    trailing: const Icon(Icons.open_in_new_rounded, color: AppColors.textTertiary, size: 20),
-                    onTap: () {},
-                  ),
-                  const SizedBox(height: 10),
-                  SettingTile(
-                    leading: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryLight,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.privacy_tip_outlined, color: AppColors.primary, size: 22),
-                    ),
-                    title: 'Privacy Policy',
-                    trailing: const Icon(Icons.open_in_new_rounded, color: AppColors.textTertiary, size: 20),
-                    onTap: () {},
                   ),
                 ],
-              ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileStat extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  const _ProfileStat({required this.label, required this.value, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: SurfaceCard(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        borderRadius: 16,
+        child: Column(
+          children: [
+            Icon(icon, size: 20, color: AppColors.textSecondary),
+            const SizedBox(height: 8),
+            Text(value, style: AppTypography.headlineSmall.copyWith(color: AppColors.textPrimary)),
+            const SizedBox(height: 2),
+            Text(label, style: AppTypography.caption),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TransactionRow extends StatelessWidget {
+  final TransactionEntry tx;
+  const _TransactionRow({required this.tx});
+
+  IconData get _icon {
+    switch (tx.type) {
+      case TransactionType.screenTimeClaim:
+        return Icons.timer_rounded;
+      case TransactionType.spinWheel:
+        return Icons.casino_rounded;
+      case TransactionType.offerwall:
+        return Icons.assignment_rounded;
+      case TransactionType.referral:
+        return Icons.people_rounded;
+      case TransactionType.rafflePrize:
+        return Icons.emoji_events_rounded;
+      case TransactionType.giftCardPurchase:
+        return Icons.card_giftcard_rounded;
+      case TransactionType.cashOut:
+        return Icons.payments_rounded;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isPositive = tx.points > 0;
+    return SurfaceCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      borderRadius: 14,
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: (isPositive ? AppColors.success : AppColors.error).withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
             ),
+            child: Icon(_icon, size: 17, color: isPositive ? AppColors.success : AppColors.error),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(tx.description, style: AppTypography.labelMedium.copyWith(color: AppColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(_timeAgo(tx.timestamp), style: AppTypography.caption),
+              ],
+            ),
+          ),
+          Text(
+            '${isPositive ? '+' : ''}${Formatters.number(tx.points)}',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: isPositive ? AppColors.success : AppColors.error),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _timeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
+}
+
+class _SettingTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _SettingTile({required this.icon, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: AppColors.textSecondary),
+            const SizedBox(width: 14),
+            Text(label, style: AppTypography.bodyLarge.copyWith(color: AppColors.textPrimary)),
             const Spacer(),
-            Center(
-              child: Text('Version 1.0.0', style: AppTypography.caption),
-            ),
-            const SizedBox(height: 20),
+            const Icon(Icons.chevron_right_rounded, size: 20, color: AppColors.textTertiary),
           ],
         ),
       ),

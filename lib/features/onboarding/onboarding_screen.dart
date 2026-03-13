@@ -1,17 +1,16 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:confetti/confetti.dart';
 import '../../shared/providers/app_providers.dart';
-import '../../models/blocked_app_model.dart';
-import '../../models/user_model.dart';
 import '../../design_system/colors/app_colors.dart';
 import '../../design_system/typography/app_typography.dart';
-
-final _selectedAppsProvider = StateProvider<Set<String>>((ref) => {});
-final _selectedExerciseProvider = StateProvider<ExerciseType?>((ref) => null);
-final _selectedRepCountProvider = StateProvider<int>((ref) => 10);
-final _selectedGoalProvider = StateProvider<String?>((ref) => null);
+import '../../design_system/widgets/primary_button.dart';
+import '../../design_system/widgets/surface_card.dart';
+import '../../design_system/widgets/gradient_background.dart';
+import '../../core/utils/formatters.dart';
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
@@ -20,972 +19,1146 @@ class OnboardingScreen extends ConsumerStatefulWidget {
   ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
-  late final PageController _pageController;
-  int _currentPage = 0;
-  static const _totalPages = 6;
+class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
+    with TickerProviderStateMixin {
+  final _pageController = PageController();
+  int _page = 0;
+
+  int? _dailyMinutes;
+  final Set<String> _selectedInterests = {};
+  bool _claimDemoCompleted = false;
+  bool _earningsAnimated = false;
+
+  int _animatedEarnings = 0;
+  Timer? _earningsTimer;
+
+  int _animatedAccPoints = 0;
+  Timer? _accTimer;
+
+  bool _adLoading = false;
+  bool _adDone = false;
+  double _adProgress = 0;
+  Timer? _adTimer;
+
+  late final AnimationController _progressAnimController;
+  late final Animation<double> _progressAnim;
+  bool _accAnimStarted = false;
+
+  late final ConfettiController _claimConfetti;
+  late final ConfettiController _readyConfetti;
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-      ),
+    _claimConfetti = ConfettiController(duration: const Duration(seconds: 2));
+    _readyConfetti = ConfettiController(duration: const Duration(seconds: 3));
+
+    _progressAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
     );
+    _progressAnim = Tween<double>(begin: 0, end: 0.7).animate(
+      CurvedAnimation(parent: _progressAnimController, curve: Curves.easeOut),
+    );
+    _progressAnimController.addListener(() {
+      if (mounted) {
+        setState(() {
+          _animatedAccPoints = (_progressAnim.value / 0.7 * 1400).round();
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    _earningsTimer?.cancel();
+    _accTimer?.cancel();
+    _adTimer?.cancel();
+    _progressAnimController.dispose();
+    _claimConfetti.dispose();
+    _readyConfetti.dispose();
     super.dispose();
   }
 
-  void _nextPage() {
-    if (_currentPage < _totalPages - 1) {
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOutCubic,
-      );
-    }
-  }
-
-  void _previousPage() {
-    if (_currentPage > 0) {
-      _pageController.previousPage(
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOutCubic,
-      );
-    }
-  }
-
-  void _completeOnboarding() {
-    final selectedApps = ref.read(_selectedAppsProvider);
-    final exercise = ref.read(_selectedExerciseProvider) ?? ExerciseType.pushUps;
-    final repCount = ref.read(_selectedRepCountProvider);
-
-    for (final appId in selectedApps) {
-      final apps = ref.read(blockedAppsProvider);
-      final app = apps.firstWhere((a) => a.id == appId, orElse: () => apps.first);
-      if (!app.isActive) {
-        ref.read(blockedAppsProvider.notifier).toggleApp(appId);
-      }
-    }
-
-    final user = ref.read(userProvider);
-    ref.read(userProvider.notifier).state = user.copyWith(
-      preferredExercise: exercise,
-      exerciseDifficulty: repCount,
+  void _goTo(int page) {
+    HapticFeedback.mediumImpact();
+    _pageController.animateToPage(
+      page,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOut,
     );
+  }
 
+  void _next() {
+    if (_page < 10) _goTo(_page + 1);
+  }
+
+  void _complete() {
+    HapticFeedback.heavyImpact();
     ref.read(onboardingCompleteProvider.notifier).state = true;
   }
 
-  bool get _canProceed {
-    switch (_currentPage) {
-      case 0:
-        return true;
-      case 1:
-        return ref.watch(_selectedAppsProvider).isNotEmpty;
-      case 2:
-        return ref.watch(_selectedExerciseProvider) != null;
-      case 3:
-        return true;
-      case 4:
-        return ref.watch(_selectedGoalProvider) != null;
-      case 5:
-        return true;
-      default:
-        return false;
-    }
+  int get _dailyPts {
+    final capped = (_dailyMinutes ?? 20).clamp(0, 20);
+    return capped * 100;
+  }
+
+  int get _monthlyPts => _dailyPts * 30;
+
+  void _startEarningsAnimation() {
+    if (_earningsAnimated) return;
+    _earningsAnimated = true;
+    _animatedEarnings = 0;
+    final target = _dailyPts;
+    const steps = 60;
+    final increment = (target / steps).ceil();
+    _earningsTimer = Timer.periodic(const Duration(milliseconds: 30), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      setState(() {
+        _animatedEarnings = (_animatedEarnings + increment).clamp(0, target);
+      });
+      if (_animatedEarnings >= target) t.cancel();
+    });
+  }
+
+  void _startAccumulationAnim() {
+    if (_accAnimStarted) return;
+    _accAnimStarted = true;
+    _progressAnimController.forward();
+  }
+
+  void _startAdDemo() {
+    setState(() {
+      _adLoading = true;
+      _adProgress = 0;
+    });
+    _adTimer = Timer.periodic(const Duration(milliseconds: 50), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      setState(() {
+        _adProgress = (_adProgress + 1 / 60).clamp(0.0, 1.0);
+      });
+      if (_adProgress >= 1.0) {
+        t.cancel();
+        setState(() {
+          _adLoading = false;
+          _adDone = true;
+          _claimDemoCompleted = true;
+        });
+        _claimConfetti.play();
+        HapticFeedback.heavyImpact();
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
-          children: [
-            if (_currentPage > 0 && _currentPage < _totalPages - 1)
-              _TopBar(
-                currentPage: _currentPage,
-                totalPages: _totalPages,
-                onBack: _previousPage,
-              ),
-            Expanded(
-              child: PageView(
-                controller: _pageController,
-                physics: const NeverScrollableScrollPhysics(),
-                onPageChanged: (page) => setState(() => _currentPage = page),
+      backgroundColor: AppColors.background,
+      body: GradientBackground(
+        child: SafeArea(
+          child: Stack(
+            children: [
+              Column(
                 children: [
-                  _WelcomeStep(onNext: _nextPage),
-                  _SelectAppsStep(onNext: _nextPage),
-                  _ChooseExerciseStep(onNext: _nextPage),
-                  _RepCountStep(onNext: _nextPage),
-                  _GoalStep(onNext: _nextPage),
-                  _CelebrationStep(onComplete: _completeOnboarding),
+                  _buildTopBar(),
+                  Expanded(
+                    child: PageView(
+                      controller: _pageController,
+                      physics: const NeverScrollableScrollPhysics(),
+                      onPageChanged: (i) => setState(() => _page = i),
+                      children: [
+                        _buildWelcome(),
+                        _buildQuestion1(),
+                        _buildEarningsDemo(),
+                        _buildAccumulationDemo(),
+                        _buildClaimDemo(),
+                        _buildStreaks(),
+                        _buildQuestion2(),
+                        _buildSpinWheel(),
+                        _buildReferral(),
+                        _buildNotifications(),
+                        _buildReady(),
+                      ],
+                    ),
+                  ),
+                  _buildDots(),
+                  const SizedBox(height: 24),
                 ],
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
-}
 
-// ─── Top Bar with Progress ───
-
-class _TopBar extends StatelessWidget {
-  final int currentPage;
-  final int totalPages;
-  final VoidCallback onBack;
-
-  const _TopBar({
-    required this.currentPage,
-    required this.totalPages,
-    required this.onBack,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final progress = currentPage / (totalPages - 1);
+  Widget _buildTopBar() {
+    final showSkip = _page > 0 && _page < 10;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          IconButton(
-            onPressed: onBack,
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-            color: AppColors.textPrimary,
-            splashRadius: 24,
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 4,
-                backgroundColor: AppColors.border,
-                valueColor:
-                    const AlwaysStoppedAnimation<Color>(AppColors.textPrimary),
+          if (showSkip)
+            GestureDetector(
+              onTap: () {
+                HapticFeedback.lightImpact();
+                _complete();
+              },
+              child: Text(
+                'Skip',
+                style: AppTypography.labelMedium.copyWith(
+                  color: AppColors.textTertiary,
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: 52),
+            )
+          else
+            const SizedBox(height: 20),
         ],
       ),
     );
   }
-}
 
-// ─── Step 1: Welcome ───
-
-class _WelcomeStep extends StatelessWidget {
-  final VoidCallback onNext;
-  const _WelcomeStep({required this.onNext});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildDots() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: List.generate(11, (i) {
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            width: _page == i ? 20 : 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: _page == i ? AppColors.primary : AppColors.border,
+              borderRadius: BorderRadius.circular(3),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _wrapStep({required List<Widget> children, Widget? button}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
-          const Spacer(flex: 3),
-          Text(
-            '🛡️',
-            style: const TextStyle(fontSize: 72),
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(height: 24),
+                  ...children,
+                  const SizedBox(height: 32),
+                ],
+              ),
+            ),
+          ),
+          if (button != null) ...[
+            button,
+            const SizedBox(height: 8),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWelcome() {
+    return _wrapStep(
+      children: [
+        const SizedBox(height: 60),
+        Container(
+          width: 100,
+          height: 100,
+          decoration: BoxDecoration(
+            gradient: AppColors.primaryGradient,
+            borderRadius: BorderRadius.circular(30),
+          ),
+          child: const Icon(Icons.bolt_rounded, size: 48, color: Colors.white),
+        )
+            .animate(onPlay: (c) => c.repeat(reverse: true))
+            .scale(
+              begin: const Offset(0.92, 0.92),
+              end: const Offset(1.08, 1.08),
+              duration: 1500.ms,
+              curve: Curves.easeInOut,
+            ),
+        const SizedBox(height: 48),
+        ShaderMask(
+          shaderCallback: (bounds) => const LinearGradient(
+            colors: [AppColors.primary, AppColors.accent],
+          ).createShader(bounds),
+          child: Text(
+            'DoomScroll',
+            style: AppTypography.displayLarge.copyWith(
+              fontSize: 42,
+              color: Colors.white,
+            ),
+          ),
+        ).animate().fadeIn(duration: 600.ms),
+        const SizedBox(height: 16),
+        Text(
+          'Turn your screen time into real rewards',
+          style: AppTypography.bodyLarge,
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(duration: 500.ms, delay: 200.ms),
+      ],
+      button: PrimaryButton(
+        label: "Let's Go",
+        icon: Icons.arrow_forward_rounded,
+        gradient: AppColors.primaryGradient,
+        onPressed: _next,
+      ),
+    );
+  }
+
+  Widget _buildQuestion1() {
+    final options = [
+      ('Less than 30 min', Icons.timer_outlined, 20),
+      ('30 min – 1 hour', Icons.timelapse_rounded, 45),
+      ('1–2 hours', Icons.access_time_filled_rounded, 90),
+      ('More than 2 hours', Icons.all_inclusive_rounded, 150),
+    ];
+
+    return _wrapStep(
+      children: [
+        Text(
+          'How much time do you\nspend on social media daily?',
+          style: AppTypography.displaySmall,
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(duration: 400.ms),
+        const SizedBox(height: 32),
+        ...options.map((o) {
+          final selected = _dailyMinutes == o.$3;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: SurfaceCard(
+              borderColor: selected ? AppColors.primary : null,
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() => _dailyMinutes = o.$3);
+              },
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: Row(
+                children: [
+                  Icon(o.$2, color: selected ? AppColors.primary : AppColors.textSecondary, size: 24),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      o.$1,
+                      style: AppTypography.headlineSmall.copyWith(
+                        color: selected ? AppColors.textPrimary : AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                  if (selected)
+                    const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 22),
+                ],
+              ),
+            ),
+          ).animate().fadeIn(duration: 300.ms, delay: (100 * options.indexOf(o)).ms);
+        }),
+      ],
+      button: PrimaryButton(
+        label: 'Continue',
+        gradient: AppColors.primaryGradient,
+        onPressed: _next,
+        enabled: _dailyMinutes != null,
+      ),
+    );
+  }
+
+  Widget _buildEarningsDemo() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_page == 2) _startEarningsAnimation();
+    });
+
+    return _wrapStep(
+      children: [
+        const SizedBox(height: 24),
+        Text(
+          'Based on your usage, you could earn',
+          style: AppTypography.bodyLarge,
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(duration: 400.ms),
+        const SizedBox(height: 32),
+        Text(
+          Formatters.number(_animatedEarnings),
+          style: AppTypography.number.copyWith(fontSize: 56),
+        ),
+        Text(
+          'pts / day',
+          style: AppTypography.headlineSmall.copyWith(color: AppColors.textTertiary),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          "That's ~${Formatters.number(_monthlyPts)} points per month",
+          style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(duration: 400.ms, delay: 300.ms),
+        if (_monthlyPts >= 5000) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.successMuted,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.card_giftcard_rounded, color: AppColors.success, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  'Enough for Amazon \$5 Gift Card',
+                  style: AppTypography.labelMedium.copyWith(color: AppColors.success),
+                ),
+              ],
+            ),
+          ).animate().fadeIn(duration: 400.ms, delay: 500.ms).slideY(begin: 0.2, end: 0),
+        ],
+      ],
+      button: PrimaryButton(
+        label: "That's Amazing",
+        icon: Icons.auto_awesome_rounded,
+        gradient: AppColors.successGradient,
+        onPressed: _next,
+      ),
+    );
+  }
+
+  Widget _buildAccumulationDemo() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_page == 3) _startAccumulationAnim();
+    });
+
+    return _wrapStep(
+      children: [
+        const SizedBox(height: 16),
+        Text(
+          'How It Works',
+          style: AppTypography.displaySmall,
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(duration: 400.ms),
+        const SizedBox(height: 8),
+        Text(
+          'While you use social apps, points\naccumulate automatically',
+          style: AppTypography.bodyLarge,
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(duration: 400.ms, delay: 100.ms),
+        const SizedBox(height: 40),
+        AnimatedBuilder(
+          animation: _progressAnim,
+          builder: (context, _) {
+            return SizedBox(
+              width: 160,
+              height: 160,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: 160,
+                    height: 160,
+                    child: CircularProgressIndicator(
+                      value: _progressAnim.value,
+                      strokeWidth: 10,
+                      strokeCap: StrokeCap.round,
+                      backgroundColor: AppColors.surfaceLight,
+                      valueColor: const AlwaysStoppedAnimation(AppColors.primary),
+                    ),
+                  ),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${(_progressAnim.value * 100).round()}%',
+                        style: AppTypography.number.copyWith(fontSize: 28),
+                      ),
+                      Text(
+                        '${Formatters.number(_animatedAccPoints)} pts',
+                        style: AppTypography.labelMedium.copyWith(color: AppColors.primary),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 32),
+        SurfaceCard(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryMuted,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.info_outline_rounded, color: AppColors.primary, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Up to 2,000 points per session.\nThen claim them!',
+                  style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
+                ),
+              ),
+            ],
+          ),
+        ).animate().fadeIn(duration: 400.ms, delay: 400.ms),
+      ],
+      button: PrimaryButton(
+        label: 'Got it',
+        gradient: AppColors.primaryGradient,
+        onPressed: _next,
+      ),
+    );
+  }
+
+  Widget _buildClaimDemo() {
+    return _wrapStep(
+      children: [
+        Align(
+          alignment: Alignment.topCenter,
+          child: ConfettiWidget(
+            confettiController: _claimConfetti,
+            blastDirectionality: BlastDirectionality.explosive,
+            shouldLoop: false,
+            maxBlastForce: 20,
+            minBlastForce: 5,
+            numberOfParticles: 25,
+            colors: const [
+              AppColors.primary,
+              AppColors.accent,
+              AppColors.success,
+              AppColors.primaryLight,
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Claim Your Points',
+          style: AppTypography.displaySmall,
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(duration: 400.ms),
+        const SizedBox(height: 8),
+        Text(
+          'Watch a quick ad to claim your points',
+          style: AppTypography.bodyLarge,
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(duration: 400.ms, delay: 100.ms),
+        const SizedBox(height: 48),
+        if (!_adLoading && !_adDone) ...[
+          PrimaryButton(
+            label: 'Claim 1,400 pts',
+            icon: Icons.play_circle_outline_rounded,
+            gradient: AppColors.successGradient,
+            onPressed: _startAdDemo,
+          ).animate().fadeIn(duration: 400.ms, delay: 200.ms).scale(
+                begin: const Offset(0.95, 0.95),
+                end: const Offset(1, 1),
+              ),
+        ],
+        if (_adLoading) ...[
+          SurfaceCard(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                Text(
+                  'Loading ad…',
+                  style: AppTypography.labelMedium.copyWith(color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 16),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: _adProgress,
+                    backgroundColor: AppColors.surfaceLight,
+                    valueColor: const AlwaysStoppedAnimation(AppColors.primary),
+                    minHeight: 8,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (_adDone) ...[
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: AppColors.successMuted,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+            ),
+            child: Column(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 48),
+                const SizedBox(height: 12),
+                Text(
+                  '+1,400 points!',
+                  style: AppTypography.headlineLarge.copyWith(color: AppColors.success),
+                ),
+              ],
+            ),
           )
               .animate()
               .scale(
                 begin: const Offset(0.5, 0.5),
                 end: const Offset(1, 1),
-                duration: 600.ms,
-                curve: Curves.elasticOut,
-              ),
-          const SizedBox(height: 32),
-          Text(
-            'Vitality',
-            style: AppTypography.displayLarge.copyWith(
-              fontSize: 52,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -2,
-            ),
-          )
-              .animate()
-              .fadeIn(duration: 500.ms, delay: 200.ms)
-              .slideY(begin: 0.3, end: 0, duration: 500.ms, delay: 200.ms),
-          const SizedBox(height: 16),
-          Text(
-            'Block distracting apps.\nEarn rewards.',
-            textAlign: TextAlign.center,
-            style: AppTypography.bodyLarge.copyWith(
-              fontSize: 20,
-              height: 1.4,
-              color: AppColors.textSecondary,
-            ),
-          )
-              .animate()
-              .fadeIn(duration: 500.ms, delay: 400.ms)
-              .slideY(begin: 0.3, end: 0, duration: 500.ms, delay: 400.ms),
-          const SizedBox(height: 12),
-          Text(
-            'Do exercises to unlock your phone.\nStay focused & get fit.',
-            textAlign: TextAlign.center,
-            style: AppTypography.bodyMedium.copyWith(
-              color: AppColors.textTertiary,
-            ),
-          )
-              .animate()
-              .fadeIn(duration: 500.ms, delay: 550.ms),
-          const Spacer(flex: 4),
-          _PrimaryButton(
-            label: 'Start Quiz',
-            onPressed: onNext,
-          )
-              .animate()
-              .fadeIn(duration: 400.ms, delay: 700.ms)
-              .slideY(begin: 0.4, end: 0, duration: 500.ms, delay: 700.ms),
-          const SizedBox(height: 48),
+                duration: 500.ms,
+                curve: Curves.easeOutBack,
+              )
+              .fadeIn(duration: 300.ms),
         ],
-      ),
-    );
-  }
-}
-
-// ─── Step 2: Select Distracting Apps ───
-
-class _SelectAppsStep extends ConsumerWidget {
-  final VoidCallback onNext;
-  const _SelectAppsStep({required this.onNext});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final selectedApps = ref.watch(_selectedAppsProvider);
-    final apps = defaultBlockableApps();
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 16),
-          Text(
-            'Which apps distract\nyou the most?',
-            style: AppTypography.displaySmall.copyWith(
-              fontWeight: FontWeight.w800,
-              fontSize: 28,
-            ),
-          )
-              .animate()
-              .fadeIn(duration: 400.ms)
-              .slideX(begin: -0.1, end: 0, duration: 400.ms),
-          const SizedBox(height: 8),
-          Text(
-            'Select at least 1 app to block',
-            style: AppTypography.bodyMedium,
-          ).animate().fadeIn(duration: 400.ms, delay: 100.ms),
-          const SizedBox(height: 24),
-          Expanded(
-            child: GridView.builder(
-              padding: const EdgeInsets.only(bottom: 16),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 2.2,
-              ),
-              itemCount: apps.length,
-              itemBuilder: (context, index) {
-                final app = apps[index];
-                final isSelected = selectedApps.contains(app.id);
-                return _AppCard(
-                  app: app,
-                  isSelected: isSelected,
-                  onTap: () {
-                    final current = Set<String>.from(selectedApps);
-                    if (current.contains(app.id)) {
-                      current.remove(app.id);
-                    } else {
-                      current.add(app.id);
-                    }
-                    ref.read(_selectedAppsProvider.notifier).state = current;
-                  },
-                )
-                    .animate()
-                    .fadeIn(
-                      duration: 300.ms,
-                      delay: (80 * index).ms,
-                    )
-                    .scale(
-                      begin: const Offset(0.9, 0.9),
-                      end: const Offset(1, 1),
-                      duration: 300.ms,
-                      delay: (80 * index).ms,
-                    );
-              },
-            ),
-          ),
-          _PrimaryButton(
-            label: 'Continue',
-            onPressed: selectedApps.isNotEmpty ? onNext : null,
-          ),
-          const SizedBox(height: 32),
-        ],
-      ),
-    );
-  }
-}
-
-class _AppCard extends StatelessWidget {
-  final BlockedAppModel app;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _AppCard({
-    required this.app,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        onTap();
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.textPrimary.withOpacity(0.06)
-              : AppColors.surfaceSecondary,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected ? AppColors.textPrimary : Colors.transparent,
-            width: 2,
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(app.iconEmoji, style: const TextStyle(fontSize: 24)),
-            const SizedBox(width: 10),
-            Flexible(
-              child: Text(
-                app.name,
-                style: AppTypography.headlineSmall.copyWith(
-                  fontWeight:
-                      isSelected ? FontWeight.w700 : FontWeight.w500,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (isSelected) ...[
-              const SizedBox(width: 8),
-              Container(
-                width: 22,
-                height: 22,
-                decoration: const BoxDecoration(
-                  color: AppColors.textPrimary,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.check, size: 14, color: Colors.white),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Step 3: Choose Exercise ───
-
-class _ChooseExerciseStep extends ConsumerWidget {
-  final VoidCallback onNext;
-  const _ChooseExerciseStep({required this.onNext});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final selected = ref.watch(_selectedExerciseProvider);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 16),
-          Text(
-            'Pick your exercise',
-            style: AppTypography.displaySmall.copyWith(
-              fontWeight: FontWeight.w800,
-              fontSize: 28,
-            ),
-          )
-              .animate()
-              .fadeIn(duration: 400.ms)
-              .slideX(begin: -0.1, end: 0, duration: 400.ms),
-          const SizedBox(height: 8),
-          Text(
-            'This is what you\'ll do to unlock apps',
-            style: AppTypography.bodyMedium,
-          ).animate().fadeIn(duration: 400.ms, delay: 100.ms),
-          const SizedBox(height: 32),
-          Expanded(
-            child: Row(
-              children: ExerciseType.values.asMap().entries.map((entry) {
-                final index = entry.key;
-                final exercise = entry.value;
-                final isSelected = selected == exercise;
-                return Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.only(
-                      left: index == 0 ? 0 : 6,
-                      right: index == 2 ? 0 : 6,
-                    ),
-                    child: _ExerciseCard(
-                      exercise: exercise,
-                      isSelected: isSelected,
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        ref.read(_selectedExerciseProvider.notifier).state =
-                            exercise;
-                      },
-                    )
-                        .animate()
-                        .fadeIn(
-                          duration: 350.ms,
-                          delay: (120 * index).ms,
-                        )
-                        .slideY(
-                          begin: 0.15,
-                          end: 0,
-                          duration: 400.ms,
-                          delay: (120 * index).ms,
-                        ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 24),
-          _PrimaryButton(
-            label: 'Continue',
-            onPressed: selected != null ? onNext : null,
-          ),
-          const SizedBox(height: 32),
-        ],
-      ),
-    );
-  }
-}
-
-class _ExerciseCard extends StatelessWidget {
-  final ExerciseType exercise;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _ExerciseCard({
-    required this.exercise,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.primary.withOpacity(0.06)
-              : AppColors.surfaceSecondary,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? AppColors.primary : Colors.transparent,
-            width: 2.5,
-          ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              exercise.emoji,
-              style: const TextStyle(fontSize: 48),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              exercise.label,
-              textAlign: TextAlign.center,
-              style: AppTypography.headlineSmall.copyWith(
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected
-                    ? AppColors.primary
-                    : AppColors.textPrimary,
-              ),
-            ),
-            if (isSelected) ...[
-              const SizedBox(height: 12),
-              Container(
-                width: 26,
-                height: 26,
-                decoration: const BoxDecoration(
-                  color: AppColors.primary,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.check, size: 16, color: Colors.white),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Step 4: Rep Count ───
-
-class _RepCountStep extends ConsumerWidget {
-  final VoidCallback onNext;
-  const _RepCountStep({required this.onNext});
-
-  static const _presets = [5, 10, 15, 20, 25, 30];
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final selectedCount = ref.watch(_selectedRepCountProvider);
-    final exercise = ref.watch(_selectedExerciseProvider) ?? ExerciseType.pushUps;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 16),
-          Text(
-            'How many ${exercise.label.toLowerCase()}\ncan you do?',
-            style: AppTypography.displaySmall.copyWith(
-              fontWeight: FontWeight.w800,
-              fontSize: 28,
-            ),
-          )
-              .animate()
-              .fadeIn(duration: 400.ms)
-              .slideX(begin: -0.1, end: 0, duration: 400.ms),
-          const SizedBox(height: 8),
-          Text(
-            'We\'ll set your starting difficulty',
-            style: AppTypography.bodyMedium,
-          ).animate().fadeIn(duration: 400.ms, delay: 100.ms),
-          const SizedBox(height: 40),
-          Center(
-            child: Text(
-              '$selectedCount',
-              style: AppTypography.repCount.copyWith(
-                fontSize: 80,
-                fontWeight: FontWeight.w900,
-              ),
+      ],
+      button: _claimDemoCompleted
+          ? PrimaryButton(
+              label: 'Continue',
+              gradient: AppColors.primaryGradient,
+              onPressed: _next,
             )
-                .animate(key: ValueKey(selectedCount))
-                .scale(
-                  begin: const Offset(0.8, 0.8),
-                  end: const Offset(1, 1),
-                  duration: 200.ms,
-                  curve: Curves.easeOut,
-                )
-                .fadeIn(duration: 200.ms),
-          ),
-          Center(
-            child: Text(
-              exercise.label.toLowerCase(),
-              style: AppTypography.bodyLarge.copyWith(
-                color: AppColors.textTertiary,
-                fontSize: 18,
-              ),
-            ),
-          ),
-          const SizedBox(height: 48),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            alignment: WrapAlignment.center,
-            children: _presets.asMap().entries.map((entry) {
-              final index = entry.key;
-              final count = entry.value;
-              final isSelected = selectedCount == count;
-              return _RepChip(
-                count: count,
-                isSelected: isSelected,
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  ref.read(_selectedRepCountProvider.notifier).state = count;
-                },
-              )
-                  .animate()
-                  .fadeIn(
-                    duration: 300.ms,
-                    delay: (60 * index).ms,
-                  )
-                  .scale(
-                    begin: const Offset(0.85, 0.85),
-                    end: const Offset(1, 1),
-                    duration: 300.ms,
-                    delay: (60 * index).ms,
-                  );
-            }).toList(),
-          ),
-          const Spacer(),
-          _PrimaryButton(
-            label: 'Continue',
-            onPressed: onNext,
-          ),
-          const SizedBox(height: 32),
-        ],
-      ),
+          : null,
     );
   }
-}
 
-class _RepChip extends StatelessWidget {
-  final int count;
-  final bool isSelected;
-  final VoidCallback onTap;
+  Widget _buildStreaks() {
+    final streaks = [
+      ('Day 1–2', '1.0x', AppColors.textTertiary),
+      ('Day 3–6', '1.1x', AppColors.textSecondary),
+      ('Day 7–13', '1.2x', AppColors.textSecondary),
+      ('Day 14–29', '1.3x', AppColors.primaryLight),
+      ('Day 30+', '1.5x', AppColors.accent),
+    ];
 
-  const _RepChip({
-    required this.count,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-        width: 90,
-        height: 56,
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.textPrimary
-              : AppColors.surfaceSecondary,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected ? AppColors.textPrimary : Colors.transparent,
-            width: 2,
-          ),
-        ),
-        child: Center(
-          child: Text(
-            '$count',
-            style: AppTypography.headlineLarge.copyWith(
-              color: isSelected ? Colors.white : AppColors.textPrimary,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Step 5: Goal Selection ───
-
-class _GoalStep extends ConsumerWidget {
-  final VoidCallback onNext;
-  const _GoalStep({required this.onNext});
-
-  static const _goals = [
-    ('📱', 'Reduce Screen Time', 'Spend less time on distracting apps'),
-    ('💪', 'Get Fit', 'Build a consistent exercise habit'),
-    ('🎁', 'Earn Rewards', 'Collect coins and redeem gift cards'),
-  ];
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final selectedGoal = ref.watch(_selectedGoalProvider);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 16),
-          Text(
-            'What\'s your main goal?',
-            style: AppTypography.displaySmall.copyWith(
-              fontWeight: FontWeight.w800,
-              fontSize: 28,
-            ),
-          )
-              .animate()
-              .fadeIn(duration: 400.ms)
-              .slideX(begin: -0.1, end: 0, duration: 400.ms),
-          const SizedBox(height: 8),
-          Text(
-            'We\'ll personalize your experience',
-            style: AppTypography.bodyMedium,
-          ).animate().fadeIn(duration: 400.ms, delay: 100.ms),
-          const SizedBox(height: 32),
-          ...List.generate(_goals.length, (index) {
-            final (emoji, title, subtitle) = _goals[index];
-            final isSelected = selectedGoal == title;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _GoalCard(
-                emoji: emoji,
-                title: title,
-                subtitle: subtitle,
-                isSelected: isSelected,
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  ref.read(_selectedGoalProvider.notifier).state = title;
-                },
-              )
-                  .animate()
-                  .fadeIn(
-                    duration: 350.ms,
-                    delay: (100 * index).ms,
-                  )
-                  .slideX(
-                    begin: 0.08,
-                    end: 0,
-                    duration: 400.ms,
-                    delay: (100 * index).ms,
-                  ),
-            );
-          }),
-          const Spacer(),
-          _PrimaryButton(
-            label: 'Continue',
-            onPressed: selectedGoal != null ? onNext : null,
-          ),
-          const SizedBox(height: 32),
-        ],
-      ),
-    );
-  }
-}
-
-class _GoalCard extends StatelessWidget {
-  final String emoji;
-  final String title;
-  final String subtitle;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _GoalCard({
-    required this.emoji,
-    required this.title,
-    required this.subtitle,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.textPrimary.withOpacity(0.05)
-              : AppColors.surfaceSecondary,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? AppColors.textPrimary : Colors.transparent,
-            width: 2,
-          ),
-        ),
-        child: Row(
-          children: [
-            Text(emoji, style: const TextStyle(fontSize: 36)),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return _wrapStep(
+      children: [
+        Text(
+          'Daily Streaks = More Rewards',
+          style: AppTypography.displaySmall,
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(duration: 400.ms),
+        const SizedBox(height: 32),
+        ...streaks.asMap().entries.map((e) {
+          final s = e.value;
+          final isHighlight = e.key == streaks.length - 1;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: SurfaceCard(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              borderColor: isHighlight ? AppColors.accent.withValues(alpha: 0.4) : null,
+              color: isHighlight ? AppColors.accentMuted : null,
+              child: Row(
                 children: [
-                  Text(
-                    title,
-                    style: AppTypography.headlineMedium.copyWith(
-                      fontWeight:
-                          isSelected ? FontWeight.w700 : FontWeight.w600,
-                    ),
+                  Icon(
+                    Icons.local_fire_department_rounded,
+                    color: s.$3,
+                    size: 22,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: AppTypography.bodySmall.copyWith(fontSize: 13),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(s.$1, style: AppTypography.headlineSmall),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: s.$3.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      s.$2,
+                      style: AppTypography.labelMedium.copyWith(
+                        color: s.$3,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-            if (isSelected)
-              Container(
-                width: 26,
-                height: 26,
-                decoration: const BoxDecoration(
-                  color: AppColors.textPrimary,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.check, size: 16, color: Colors.white),
-              ),
-          ],
-        ),
+          ).animate().fadeIn(duration: 300.ms, delay: (80 * e.key).ms).slideX(begin: 0.1, end: 0);
+        }),
+        const SizedBox(height: 20),
+        Text(
+          'Claim every day to build your streak.\nHigher streak = bigger multiplier on every claim.',
+          style: AppTypography.bodyMedium,
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(duration: 400.ms, delay: 400.ms),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.primaryMuted,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            '1,400 pts × 1.5x = 2,100 pts',
+            style: AppTypography.headlineSmall.copyWith(color: AppColors.primaryLight),
+          ),
+        ).animate().fadeIn(duration: 400.ms, delay: 500.ms),
+      ],
+      button: PrimaryButton(
+        label: 'Love it',
+        icon: Icons.favorite_rounded,
+        gradient: AppColors.primaryGradient,
+        onPressed: _next,
       ),
     );
   }
-}
 
-// ─── Step 6: Celebration ───
+  Widget _buildQuestion2() {
+    final interests = [
+      ('Games', Icons.sports_esports_rounded, AppColors.success),
+      ('Surveys', Icons.poll_rounded, AppColors.accent),
+      ('Gift Cards', Icons.card_giftcard_rounded, AppColors.primary),
+      ('Cash Out', Icons.payments_rounded, AppColors.success),
+      ('Raffles', Icons.emoji_events_rounded, AppColors.accent),
+      ('Referrals', Icons.people_rounded, AppColors.primary),
+    ];
 
-class _CelebrationStep extends StatelessWidget {
-  final VoidCallback onComplete;
-  const _CelebrationStep({required this.onComplete});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Column(
-        children: [
-          const Spacer(flex: 3),
-          Text(
-            '🎉',
-            style: const TextStyle(fontSize: 80),
-          )
-              .animate()
-              .scale(
-                begin: const Offset(0, 0),
-                end: const Offset(1, 1),
-                duration: 600.ms,
-                curve: Curves.elasticOut,
+    return _wrapStep(
+      children: [
+        Text(
+          'What interests you most?',
+          style: AppTypography.displaySmall,
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(duration: 400.ms),
+        const SizedBox(height: 8),
+        Text(
+          'Select all that apply',
+          style: AppTypography.bodyMedium,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 28),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 2.0,
+          children: interests.map((item) {
+            final selected = _selectedInterests.contains(item.$1);
+            return GestureDetector(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() {
+                  if (selected) {
+                    _selectedInterests.remove(item.$1);
+                  } else {
+                    _selectedInterests.add(item.$1);
+                  }
+                });
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                decoration: BoxDecoration(
+                  color: selected ? item.$3.withValues(alpha: 0.1) : AppColors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: selected ? item.$3 : AppColors.border,
+                    width: selected ? 1.5 : 1,
+                  ),
+                ),
+                child: Stack(
+                  children: [
+                    Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(item.$2, color: selected ? item.$3 : AppColors.textTertiary, size: 26),
+                          const SizedBox(height: 6),
+                          Text(
+                            item.$1,
+                            style: AppTypography.labelMedium.copyWith(
+                              color: selected ? item.$3 : AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (selected)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Icon(Icons.check_circle_rounded, color: item.$3, size: 16),
+                      ),
+                  ],
+                ),
               ),
-          const SizedBox(height: 32),
-          Text(
-            'You\'re all set!',
-            style: AppTypography.displayMedium.copyWith(
-              fontWeight: FontWeight.w800,
+            );
+          }).toList(),
+        ),
+      ],
+      button: PrimaryButton(
+        label: 'Continue',
+        gradient: AppColors.primaryGradient,
+        onPressed: _next,
+        enabled: _selectedInterests.isNotEmpty,
+      ),
+    );
+  }
+
+  Widget _buildSpinWheel() {
+    final tiers = [
+      ('Common', AppColors.textSecondary),
+      ('Rare', AppColors.primary),
+      ('Epic', AppColors.accent),
+      ('Legendary', AppColors.success),
+    ];
+
+    return _wrapStep(
+      children: [
+        Text(
+          '4 Free Spins Every Day',
+          style: AppTypography.displaySmall,
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(duration: 400.ms),
+        const SizedBox(height: 32),
+        Container(
+          width: 160,
+          height: 160,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: RadialGradient(
+              colors: [
+                AppColors.primary.withValues(alpha: 0.3),
+                AppColors.accent.withValues(alpha: 0.1),
+                AppColors.surface,
+              ],
+              stops: const [0.0, 0.6, 1.0],
             ),
-          )
-              .animate()
-              .fadeIn(duration: 500.ms, delay: 300.ms)
-              .slideY(begin: 0.3, end: 0, duration: 500.ms, delay: 300.ms),
-          const SizedBox(height: 16),
-          Text(
-            'Your personalized plan is ready.\nLet\'s build healthier habits together.',
-            textAlign: TextAlign.center,
-            style: AppTypography.bodyLarge.copyWith(
-              fontSize: 18,
-              height: 1.5,
-              color: AppColors.textSecondary,
+            border: Border.all(color: AppColors.primary.withValues(alpha: 0.4), width: 3),
+          ),
+          child: Center(
+            child: Text(
+              'SPIN',
+              style: AppTypography.headlineLarge.copyWith(
+                color: AppColors.primaryLight,
+                letterSpacing: 2,
+              ),
             ),
-          )
-              .animate()
-              .fadeIn(duration: 500.ms, delay: 500.ms),
-          const SizedBox(height: 32),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _MiniStat(emoji: '🛡️', label: 'Apps blocked'),
-              const SizedBox(width: 32),
-              _MiniStat(emoji: '🏋️', label: 'Exercise set'),
-              const SizedBox(width: 32),
-              _MiniStat(emoji: '🎯', label: 'Goal chosen'),
-            ],
-          )
-              .animate()
-              .fadeIn(duration: 500.ms, delay: 700.ms)
-              .slideY(begin: 0.2, end: 0, duration: 500.ms, delay: 700.ms),
-          const Spacer(flex: 4),
-          _PrimaryButton(
-            label: 'Get Started',
-            onPressed: onComplete,
-          )
-              .animate()
-              .fadeIn(duration: 400.ms, delay: 900.ms)
-              .slideY(begin: 0.4, end: 0, duration: 500.ms, delay: 900.ms),
-          const SizedBox(height: 48),
+          ),
+        )
+            .animate(onPlay: (c) => c.repeat())
+            .rotate(duration: 8000.ms, begin: 0, end: 0.05)
+            .then()
+            .rotate(duration: 8000.ms, begin: 0.05, end: 0),
+        const SizedBox(height: 28),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.center,
+          children: tiers.map((t) {
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: t.$2.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: t.$2.withValues(alpha: 0.3)),
+              ),
+              child: Text(
+                t.$1,
+                style: AppTypography.labelMedium.copyWith(color: t.$2, fontWeight: FontWeight.w600),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 20),
+        Text(
+          'Spin the wheel after watching a short ad.\nWin up to 5,000 points!',
+          style: AppTypography.bodyMedium,
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(duration: 400.ms, delay: 200.ms),
+      ],
+      button: PrimaryButton(
+        label: "Can't Wait",
+        icon: Icons.auto_awesome_rounded,
+        gradient: AppColors.accentGradient,
+        onPressed: _next,
+      ),
+    );
+  }
+
+  Widget _buildReferral() {
+    return _wrapStep(
+      children: [
+        Text(
+          'Invite Friends,\nEarn Together',
+          style: AppTypography.displaySmall,
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(duration: 400.ms),
+        const SizedBox(height: 36),
+        _buildRefTreeRow(
+          label: 'You',
+          badge: null,
+          count: 1,
+          color: AppColors.primary,
+        ).animate().fadeIn(duration: 300.ms),
+        _buildConnectorLines(1, 3),
+        _buildRefTreeRow(
+          label: 'Level 1',
+          badge: '10%',
+          count: 3,
+          color: AppColors.accent,
+        ).animate().fadeIn(duration: 300.ms, delay: 200.ms),
+        _buildConnectorLines(3, 5),
+        _buildRefTreeRow(
+          label: 'Level 2',
+          badge: '5%',
+          count: 5,
+          color: AppColors.success,
+        ).animate().fadeIn(duration: 300.ms, delay: 400.ms),
+        const SizedBox(height: 28),
+        Text(
+          'You earn a percentage of what your network earns. The more active friends, the more you make.',
+          style: AppTypography.bodyMedium,
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(duration: 400.ms, delay: 500.ms),
+      ],
+      button: PrimaryButton(
+        label: 'Awesome',
+        icon: Icons.thumb_up_rounded,
+        gradient: AppColors.primaryGradient,
+        onPressed: _next,
+      ),
+    );
+  }
+
+  Widget _buildRefTreeRow({
+    required String label,
+    required String? badge,
+    required int count,
+    required Color color,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (badge != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                badge,
+                style: AppTypography.caption.copyWith(color: color, fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(width: 12),
+          ],
+          ...List.generate(count, (i) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: color.withValues(alpha: 0.4)),
+                ),
+                child: Icon(Icons.person_rounded, color: color, size: 20),
+              ),
+            );
+          }),
+          if (badge == null) ...[
+            const SizedBox(width: 12),
+            Text(label, style: AppTypography.labelMedium.copyWith(color: color)),
+          ],
         ],
       ),
     );
   }
-}
 
-class _MiniStat extends StatelessWidget {
-  final String emoji;
-  final String label;
-  const _MiniStat({required this.emoji, required this.label});
+  Widget _buildConnectorLines(int fromCount, int toCount) {
+    return SizedBox(
+      height: 24,
+      child: CustomPaint(
+        size: const Size(200, 24),
+        painter: _ConnectorPainter(
+          color: AppColors.border,
+        ),
+      ),
+    );
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Column(
+  Widget _buildNotifications() {
+    return _wrapStep(
       children: [
-        Text(emoji, style: const TextStyle(fontSize: 28)),
-        const SizedBox(height: 6),
+        const SizedBox(height: 40),
+        Container(
+          width: 100,
+          height: 100,
+          decoration: BoxDecoration(
+            color: AppColors.accentMuted,
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
+          ),
+          child: const Icon(Icons.notifications_active_rounded, size: 44, color: AppColors.accent),
+        )
+            .animate()
+            .scale(
+              begin: const Offset(0.8, 0.8),
+              end: const Offset(1, 1),
+              duration: 500.ms,
+              curve: Curves.easeOutBack,
+            ),
+        const SizedBox(height: 32),
         Text(
-          label,
-          style: AppTypography.labelSmall.copyWith(
-            color: AppColors.textSecondary,
-            fontSize: 11,
+          'Stay in the Loop',
+          style: AppTypography.displaySmall,
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(duration: 400.ms, delay: 100.ms),
+        const SizedBox(height: 12),
+        Text(
+          'Get notified when your points are ready to claim, when you win a raffle, or when new offers arrive.',
+          style: AppTypography.bodyLarge,
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(duration: 400.ms, delay: 200.ms),
+        const SizedBox(height: 40),
+        PrimaryButton(
+          label: 'Enable Notifications',
+          icon: Icons.notifications_rounded,
+          gradient: AppColors.accentGradient,
+          onPressed: () {
+            HapticFeedback.mediumImpact();
+            _next();
+          },
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: GestureDetector(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              _next();
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'Maybe Later',
+                style: AppTypography.labelMedium.copyWith(color: AppColors.textTertiary),
+              ),
+            ),
           ),
         ),
       ],
     );
   }
-}
 
-// ─── Shared Primary Button ───
+  Widget _buildReady() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_page == 10) _readyConfetti.play();
+    });
 
-class _PrimaryButton extends StatelessWidget {
-  final String label;
-  final VoidCallback? onPressed;
+    final dailyDisplay = _dailyPts > 0 ? _dailyPts : 2000;
 
-  const _PrimaryButton({required this.label, this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    final isEnabled = onPressed != null;
-    return SizedBox(
-      width: double.infinity,
-      height: 58,
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 200),
-        opacity: isEnabled ? 1.0 : 0.4,
-        child: ElevatedButton(
-          onPressed: onPressed,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.textPrimary,
-            foregroundColor: Colors.white,
-            disabledBackgroundColor: AppColors.textPrimary.withOpacity(0.4),
-            disabledForegroundColor: Colors.white60,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-          ),
-          child: Text(
-            label,
-            style: AppTypography.button.copyWith(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-            ),
+    return _wrapStep(
+      children: [
+        Align(
+          alignment: Alignment.topCenter,
+          child: ConfettiWidget(
+            confettiController: _readyConfetti,
+            blastDirectionality: BlastDirectionality.explosive,
+            shouldLoop: false,
+            maxBlastForce: 30,
+            minBlastForce: 10,
+            numberOfParticles: 40,
+            colors: const [
+              AppColors.primary,
+              AppColors.accent,
+              AppColors.success,
+              AppColors.primaryLight,
+            ],
           ),
         ),
+        const SizedBox(height: 40),
+        Container(
+          width: 100,
+          height: 100,
+          decoration: BoxDecoration(
+            color: AppColors.successMuted,
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+          ),
+          child: const Icon(Icons.check_rounded, size: 48, color: AppColors.success),
+        )
+            .animate()
+            .scale(
+              begin: const Offset(0, 0),
+              end: const Offset(1, 1),
+              duration: 600.ms,
+              curve: Curves.easeOutBack,
+            ),
+        const SizedBox(height: 32),
+        Text(
+          "You're All Set!",
+          style: AppTypography.displaySmall,
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(duration: 500.ms, delay: 200.ms),
+        const SizedBox(height: 8),
+        Text(
+          'Your daily earning potential:',
+          style: AppTypography.bodyLarge,
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(duration: 400.ms, delay: 300.ms),
+        const SizedBox(height: 20),
+        Text(
+          Formatters.number(dailyDisplay),
+          style: AppTypography.number.copyWith(fontSize: 52),
+        ).animate().fadeIn(duration: 500.ms, delay: 400.ms).scale(
+              begin: const Offset(0.8, 0.8),
+              end: const Offset(1, 1),
+            ),
+        Text(
+          'pts / day',
+          style: AppTypography.headlineSmall.copyWith(color: AppColors.textTertiary),
+        ).animate().fadeIn(duration: 400.ms, delay: 500.ms),
+      ],
+      button: PrimaryButton(
+        label: 'Start Earning',
+        icon: Icons.rocket_launch_rounded,
+        gradient: AppColors.successGradient,
+        onPressed: _complete,
       ),
     );
   }
+}
+
+class _ConnectorPainter extends CustomPainter {
+  final Color color;
+
+  _ConnectorPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    final midX = size.width / 2;
+    canvas.drawLine(Offset(midX, 0), Offset(midX, size.height), paint);
+    canvas.drawLine(Offset(midX - 30, size.height), Offset(midX + 30, size.height), paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

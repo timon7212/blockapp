@@ -1,94 +1,103 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../colors/app_colors.dart';
 
 class AppTypography {
   AppTypography._();
 
-  static const String _display = '.SF Pro Display';
-  static const String _text = '.SF Pro Text';
-
-  static const TextStyle displayLarge = TextStyle(
-    fontFamily: _display, fontSize: 48, fontWeight: FontWeight.w700,
-    color: AppColors.textPrimary, letterSpacing: -1.5, height: 1.1,
-  );
-
-  static const TextStyle displayMedium = TextStyle(
-    fontFamily: _display, fontSize: 34, fontWeight: FontWeight.w700,
-    color: AppColors.textPrimary, letterSpacing: -0.8, height: 1.15,
-  );
-
-  static const TextStyle displaySmall = TextStyle(
-    fontFamily: _display, fontSize: 28, fontWeight: FontWeight.w600,
-    color: AppColors.textPrimary, letterSpacing: -0.4, height: 1.2,
-  );
-
-  static const TextStyle headlineLarge = TextStyle(
-    fontFamily: _display, fontSize: 22, fontWeight: FontWeight.w700,
-    color: AppColors.textPrimary, letterSpacing: -0.2,
-  );
-
-  static const TextStyle headlineMedium = TextStyle(
-    fontFamily: _display, fontSize: 17, fontWeight: FontWeight.w600,
+  static TextStyle get _base => GoogleFonts.plusJakartaSans(
     color: AppColors.textPrimary,
   );
 
-  static const TextStyle headlineSmall = TextStyle(
-    fontFamily: _text, fontSize: 15, fontWeight: FontWeight.w600,
-    color: AppColors.textPrimary,
+  static TextStyle get displayLarge => _base.copyWith(
+    fontSize: 34,
+    fontWeight: FontWeight.w700,
+    height: 1.15,
+    letterSpacing: -0.5,
   );
 
-  static const TextStyle bodyLarge = TextStyle(
-    fontFamily: _text, fontSize: 17, fontWeight: FontWeight.w400,
-    color: AppColors.textSecondary, height: 1.5,
+  static TextStyle get displaySmall => _base.copyWith(
+    fontSize: 28,
+    fontWeight: FontWeight.w700,
+    height: 1.2,
+    letterSpacing: -0.3,
   );
 
-  static const TextStyle bodyMedium = TextStyle(
-    fontFamily: _text, fontSize: 15, fontWeight: FontWeight.w400,
-    color: AppColors.textSecondary, height: 1.45,
+  static TextStyle get headlineLarge => _base.copyWith(
+    fontSize: 22,
+    fontWeight: FontWeight.w600,
+    height: 1.25,
   );
 
-  static const TextStyle bodySmall = TextStyle(
-    fontFamily: _text, fontSize: 13, fontWeight: FontWeight.w400,
-    color: AppColors.textTertiary, height: 1.4,
+  static TextStyle get headlineMedium => _base.copyWith(
+    fontSize: 18,
+    fontWeight: FontWeight.w600,
+    height: 1.3,
   );
 
-  static const TextStyle labelLarge = TextStyle(
-    fontFamily: _text, fontSize: 15, fontWeight: FontWeight.w600,
-    color: AppColors.textPrimary,
+  static TextStyle get headlineSmall => _base.copyWith(
+    fontSize: 15,
+    fontWeight: FontWeight.w500,
+    height: 1.35,
   );
 
-  static const TextStyle labelMedium = TextStyle(
-    fontFamily: _text, fontSize: 13, fontWeight: FontWeight.w500,
+  static TextStyle get bodyLarge => _base.copyWith(
+    fontSize: 16,
+    fontWeight: FontWeight.w400,
+    height: 1.6,
     color: AppColors.textSecondary,
   );
 
-  static const TextStyle labelSmall = TextStyle(
-    fontFamily: _text, fontSize: 11, fontWeight: FontWeight.w500,
-    color: AppColors.textTertiary, letterSpacing: 0.3,
+  static TextStyle get bodyMedium => _base.copyWith(
+    fontSize: 14,
+    fontWeight: FontWeight.w400,
+    height: 1.5,
+    color: AppColors.textSecondary,
   );
 
-  static const TextStyle repCount = TextStyle(
-    fontFamily: _display, fontSize: 64, fontWeight: FontWeight.w800,
-    color: AppColors.textPrimary, letterSpacing: -2, height: 1.0,
+  static TextStyle get bodySmall => _base.copyWith(
+    fontSize: 12,
+    fontWeight: FontWeight.w400,
+    height: 1.5,
+    color: AppColors.textTertiary,
   );
 
-  static const TextStyle coinValue = TextStyle(
-    fontFamily: _display, fontSize: 20, fontWeight: FontWeight.w700,
-    color: AppColors.coin,
+  static TextStyle get labelLarge => _base.copyWith(
+    fontSize: 15,
+    fontWeight: FontWeight.w500,
+    height: 1.3,
   );
 
-  static const TextStyle caption = TextStyle(
-    fontFamily: _text, fontSize: 12, fontWeight: FontWeight.w400,
-    color: AppColors.textTertiary, letterSpacing: 0.3,
+  static TextStyle get labelMedium => _base.copyWith(
+    fontSize: 13,
+    fontWeight: FontWeight.w500,
+    height: 1.3,
+    color: AppColors.textSecondary,
   );
 
-  static const TextStyle button = TextStyle(
-    fontFamily: _text, fontSize: 17, fontWeight: FontWeight.w600,
-    color: Colors.white, letterSpacing: 0.2,
+  static TextStyle get labelSmall => _base.copyWith(
+    fontSize: 11,
+    fontWeight: FontWeight.w500,
+    color: AppColors.textTertiary,
   );
 
-  static const TextStyle sectionHeader = TextStyle(
-    fontFamily: _text, fontSize: 13, fontWeight: FontWeight.w500,
-    color: AppColors.textTertiary, letterSpacing: 1.0,
+  static TextStyle get button => _base.copyWith(
+    fontSize: 16,
+    fontWeight: FontWeight.w600,
+    height: 1.2,
+    letterSpacing: 0.2,
+  );
+
+  static TextStyle get caption => _base.copyWith(
+    fontSize: 11,
+    fontWeight: FontWeight.w400,
+    color: AppColors.textTertiary,
+  );
+
+  static TextStyle get number => GoogleFonts.inter(
+    fontSize: 32,
+    fontWeight: FontWeight.w700,
+    color: AppColors.textPrimary,
+    fontFeatures: const [FontFeature.tabularFigures()],
   );
 }

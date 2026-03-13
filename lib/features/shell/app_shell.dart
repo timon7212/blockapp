@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,10 +13,18 @@ import '../profile/profile_screen.dart';
 class AppShell extends ConsumerWidget {
   const AppShell({super.key});
 
+  static const _screens = [
+    HomeScreen(),
+    RafflesScreen(),
+    StoreScreen(),
+    NetworkScreen(),
+    ProfileScreen(),
+  ];
+
   static const _tabs = [
     _TabDef(Icons.home_rounded, Icons.home_outlined, 'Home'),
     _TabDef(Icons.emoji_events_rounded, Icons.emoji_events_outlined, 'Raffles'),
-    _TabDef(Icons.shopping_bag_rounded, Icons.shopping_bag_outlined, 'Store'),
+    _TabDef(Icons.storefront_rounded, Icons.storefront_outlined, 'Store'),
     _TabDef(Icons.people_rounded, Icons.people_outline_rounded, 'Network'),
     _TabDef(Icons.person_rounded, Icons.person_outline_rounded, 'Profile'),
   ];
@@ -26,15 +35,17 @@ class AppShell extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: IndexedStack(
-        index: tab,
-        children: const [
-          HomeScreen(),
-          RafflesScreen(),
-          StoreScreen(),
-          NetworkScreen(),
-          ProfileScreen(),
-        ],
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 250),
+        switchInCurve: Curves.easeOut,
+        switchOutCurve: Curves.easeIn,
+        transitionBuilder: (child, animation) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        child: KeyedSubtree(
+          key: ValueKey<int>(tab),
+          child: _screens[tab],
+        ),
       ),
       bottomNavigationBar: _BottomNav(
         currentIndex: tab,
@@ -61,21 +72,31 @@ class _BottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.border.withOpacity(0.4), width: 0.5)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          child: Row(
-            children: List.generate(AppShell._tabs.length, (i) {
-              final def = AppShell._tabs[i];
-              final active = i == currentIndex;
-              return _NavItem(icon: active ? def.activeIcon : def.inactiveIcon, label: def.label, active: active, onTap: () => onTap(i));
-            }),
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface.withValues(alpha: 0.9),
+            border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              child: Row(
+                children: List.generate(AppShell._tabs.length, (i) {
+                  final def = AppShell._tabs[i];
+                  final active = i == currentIndex;
+                  return _NavItem(
+                    icon: active ? def.activeIcon : def.inactiveIcon,
+                    label: def.label,
+                    active: active,
+                    onTap: () => onTap(i),
+                  );
+                }),
+              ),
+            ),
           ),
         ),
       ),
@@ -99,12 +120,28 @@ class _NavItem extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AnimatedSwitcher(
+            AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              child: Icon(icon, key: ValueKey(active), size: 24, color: active ? AppColors.navActive : AppColors.navInactive),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              decoration: BoxDecoration(
+                color: active ? AppColors.primary.withValues(alpha: 0.1) : Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                icon,
+                size: 22,
+                color: active ? AppColors.primary : AppColors.navInactive,
+              ),
             ),
-            const SizedBox(height: 2),
-            Text(label, style: TextStyle(fontSize: 10, fontWeight: active ? FontWeight.w600 : FontWeight.w400, color: active ? AppColors.navActive : AppColors.navInactive)),
+            const SizedBox(height: 3),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                color: active ? AppColors.primary : AppColors.navInactive,
+              ),
+            ),
           ],
         ),
       ),

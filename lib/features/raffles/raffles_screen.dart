@@ -1,16 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/providers/app_providers.dart';
 import '../../design_system/colors/app_colors.dart';
 import '../../design_system/typography/app_typography.dart';
-import '../../design_system/widgets/app_card.dart';
-import '../../design_system/widgets/coin_badge.dart';
+import '../../design_system/widgets/surface_card.dart';
+import '../../design_system/widgets/primary_button.dart';
+import '../../design_system/widgets/gradient_background.dart';
+import '../../design_system/widgets/app_toast.dart';
+import '../../design_system/widgets/result_sheet.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/raffle_model.dart';
-import '../../models/mission_model.dart';
-import '../earn/spin_wheel_page.dart';
-import '../earn/tasks_page.dart';
+import '../../services/ad_service.dart';
+import '../../design_system/utils/app_page_route.dart';
+import '../earn/games_screen.dart';
+import '../spin_wheel/spin_wheel_screen.dart';
+import 'winners_history_screen.dart';
 
 class RafflesScreen extends ConsumerWidget {
   const RafflesScreen({super.key});
@@ -19,27 +25,83 @@ class RafflesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final raffles = ref.watch(rafflesProvider);
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-              child: Row(
-                children: [
-                  Text('Raffles', style: AppTypography.displaySmall),
-                  const Spacer(),
-                  CoinBadge(amount: ref.watch(walletProvider).totalCoins),
-                ],
-              ),
+    return GradientBackground(
+      child: SafeArea(
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                child: Row(
+                  children: [
+                    Text('Raffles', style: AppTypography.displaySmall),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        Navigator.of(context).push(AppPageRoute(page: const WinnersHistoryScreen()));
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceMid,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.emoji_events_outlined, size: 16, color: AppColors.textSecondary),
+                            const SizedBox(width: 6),
+                            Text('Winners', style: AppTypography.labelMedium.copyWith(fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ).animate().fadeIn(duration: 400.ms),
             ),
-            ...raffles.map((raffle) => Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-              child: _RaffleSection(raffle: raffle),
-            )),
-            const SizedBox(height: 20),
+            SliverToBoxAdapter(child: const SizedBox(height: 8)),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text('Complete actions to enter. No points required.', style: AppTypography.bodySmall),
+              ).animate().fadeIn(duration: 400.ms, delay: 50.ms),
+            ),
+            SliverToBoxAdapter(child: const SizedBox(height: 24)),
+            if (raffles.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.emoji_events_outlined, size: 64, color: AppColors.textTertiary),
+                      const SizedBox(height: 16),
+                      Text('No raffles available', style: AppTypography.headlineMedium.copyWith(color: AppColors.textSecondary)),
+                      const SizedBox(height: 6),
+                      Text('Check back soon', style: AppTypography.bodySmall),
+                    ],
+                  ),
+                ),
+              )
+            else ...[
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, i) => Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                    child: _RaffleCard(raffle: raffles[i])
+                        .animate()
+                        .fadeIn(duration: 500.ms, delay: Duration(milliseconds: 100 + i * 100))
+                        .slideY(begin: 0.03, end: 0),
+                  ),
+                  childCount: raffles.length,
+                ),
+              ),
+              SliverToBoxAdapter(child: const SizedBox(height: 30)),
+            ],
           ],
         ),
       ),
@@ -47,47 +109,57 @@ class RafflesScreen extends ConsumerWidget {
   }
 }
 
-class _RaffleSection extends ConsumerWidget {
+class _RaffleCard extends ConsumerWidget {
   final RaffleModel raffle;
-  const _RaffleSection({required this.raffle});
+  const _RaffleCard({required this.raffle});
+
+  Color get _color {
+    switch (raffle.type) {
+      case RaffleType.daily: return AppColors.raffleDaily;
+      case RaffleType.weekly: return AppColors.raffleWeekly;
+      case RaffleType.monthly: return AppColors.raffleMonthly;
+    }
+  }
+
+  IconData get _icon {
+    switch (raffle.type) {
+      case RaffleType.daily: return Icons.bolt_rounded;
+      case RaffleType.weekly: return Icons.emoji_events_rounded;
+      case RaffleType.monthly: return Icons.diamond_rounded;
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final missions = ref.watch(raffleMissionsProvider(raffle.type));
-    final completedCount = missions.where((m) => m.completed).length;
-    final allDone = completedCount >= missions.length;
-
-    final typeColors = {
-      RaffleType.daily: AppColors.green,
-      RaffleType.weekly: AppColors.primary,
-      RaffleType.monthly: AppColors.purple,
-    };
-    final color = typeColors[raffle.type] ?? AppColors.primary;
+    final completedTasks = raffle.entryTasks.where((t) => t.isCompleted).length;
+    final allDone = raffle.allTasksCompleted;
     final winnersCount = (raffle.totalParticipants * 0.1).round().clamp(1, 9999);
 
-    return AppCard(
+    return SurfaceCard(
       padding: EdgeInsets.zero,
+      borderRadius: 20,
+      borderColor: raffle.isEntered ? _color.withValues(alpha: 0.3) : AppColors.border,
       child: Column(
         children: [
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [color.withOpacity(0.08), color.withOpacity(0.02)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              color: _color.withValues(alpha: 0.05),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
             ),
             child: Column(
               children: [
                 Row(
                   children: [
                     Container(
-                      width: 48, height: 48,
-                      decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(14)),
-                      child: Center(child: Text(raffle.type.emoji, style: const TextStyle(fontSize: 24))),
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: _color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(_icon, color: _color, size: 22),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -95,19 +167,29 @@ class _RaffleSection extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(raffle.title, style: AppTypography.headlineMedium),
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 4),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(6)),
-                            child: Text(raffle.type.label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
+                            decoration: BoxDecoration(
+                              color: _color.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(raffle.type.label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: _color)),
                           ),
                         ],
                       ),
                     ),
-                    Text(Formatters.currency(raffle.prizeAmount), style: AppTypography.headlineLarge.copyWith(color: color)),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(Formatters.points(raffle.prizePoints), style: AppTypography.headlineLarge.copyWith(color: _color)),
+                        const SizedBox(height: 2),
+                        Text('pts prize', style: AppTypography.caption),
+                      ],
+                    ),
                   ],
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     _RaffleStat(icon: Icons.people_outline_rounded, label: Formatters.compact(raffle.totalParticipants)),
@@ -117,227 +199,162 @@ class _RaffleSection extends ConsumerWidget {
                     _RaffleStat(icon: Icons.emoji_events_outlined, label: '$winnersCount winners'),
                   ],
                 ),
-                const SizedBox(height: 10),
-                GestureDetector(
-                  onTap: () => _showWinnersHistory(context, raffle),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: color.withOpacity(0.2)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.history_rounded, size: 16, color: color),
-                        const SizedBox(width: 6),
-                        Text('Winners History', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
-                      ],
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(18, 14, 18, 4),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
             child: Row(
               children: [
-                Text('Tasks to enter', style: AppTypography.headlineSmall),
+                Text('Entry Tasks', style: AppTypography.headlineSmall),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: allDone ? AppColors.green.withOpacity(0.1) : AppColors.primary.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(10),
+                    color: allDone ? AppColors.success.withValues(alpha: 0.1) : AppColors.surfaceMid,
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text('$completedCount/${missions.length}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: allDone ? AppColors.green : AppColors.primary)),
+                  child: Text(
+                    '$completedTasks/${raffle.entryTasks.length}',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: allDone ? AppColors.success : AppColors.textTertiary),
+                  ),
                 ),
               ],
             ),
           ),
-          ...missions.map((m) => Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 5),
-            child: _MissionRow(mission: m),
+          ...raffle.entryTasks.map((task) => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+            child: _TaskRow(task: task, raffleId: raffle.id, color: _color),
           )),
           Padding(
-            padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
-            child: GestureDetector(
-              onTap: () {
-                HapticFeedback.mediumImpact();
-                if (!allDone) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: const Text('Complete all tasks to enter this raffle'),
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    margin: const EdgeInsets.all(16),
-                  ));
-                  return;
-                }
-                if (raffle.isEntered) return;
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text('Entered ${raffle.title}!'),
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  margin: const EdgeInsets.all(16),
-                ));
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+            child: PrimaryButton(
+              label: raffle.isEntered ? 'Entered' : allDone ? 'Enter Raffle' : 'Complete Tasks to Enter',
+              enabled: allDone && !raffle.isEntered,
+              gradient: raffle.isEntered
+                  ? LinearGradient(colors: [AppColors.success.withValues(alpha: 0.3), AppColors.success.withValues(alpha: 0.2)])
+                  : LinearGradient(colors: [_color, _color.withValues(alpha: 0.7)]),
+              icon: raffle.isEntered ? Icons.check_circle_rounded : null,
+              height: 48,
+              onPressed: () {
+                HapticFeedback.heavyImpact();
+                ref.read(rafflesProvider.notifier).enterRaffle(raffle.id);
+                ResultSheet.show(
+                  context,
+                  icon: Icons.check_circle_rounded,
+                  iconColor: AppColors.success,
+                  title: 'You\'re In!',
+                  subtitle: 'Entered ${raffle.title}. Good luck!',
+                );
               },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: double.infinity, height: 48,
-                decoration: BoxDecoration(
-                  color: raffle.isEntered ? AppColors.greenLight : allDone ? color : AppColors.inactive,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Center(
-                  child: Text(
-                    raffle.isEntered ? '✓ Entered' : allDone ? 'Enter Raffle' : 'Complete Tasks to Enter',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: raffle.isEntered ? AppColors.green : allDone ? Colors.white : AppColors.textTertiary),
-                  ),
-                ),
-              ),
             ),
           ),
         ],
       ),
     );
   }
-
-  void _showWinnersHistory(BuildContext context, RaffleModel raffle) {
-    final winnersCount = (raffle.totalParticipants * 0.1).round().clamp(1, 10);
-    final mockWinners = List.generate(winnersCount, (i) => _MockWinner(
-      'User${1000 + i}',
-      ['👑', '⭐', '🏆', '💎', '🎯', '✨', '🔥', '💪', '🚀', '🎉'][i % 10],
-    ));
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(width: 36, height: 4, decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2))),
-            const SizedBox(height: 16),
-            Text('${raffle.title} — Previous Winners', style: AppTypography.headlineLarge),
-            const SizedBox(height: 4),
-            Text('${mockWinners.length} winners (10% of participants)', style: AppTypography.bodySmall),
-            const SizedBox(height: 16),
-            ...mockWinners.map((w) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36, height: 36,
-                    decoration: BoxDecoration(color: AppColors.surfaceSecondary, borderRadius: BorderRadius.circular(10)),
-                    child: Center(child: Text(w.avatar, style: const TextStyle(fontSize: 18))),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(w.name, style: AppTypography.headlineSmall),
-                  const Spacer(),
-                  Text(Formatters.currency(raffle.prizeAmount / mockWinners.length), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.green)),
-                ],
-              ),
-            )),
-            const SizedBox(height: 10),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
-class _MockWinner {
-  final String name;
-  final String avatar;
-  const _MockWinner(this.name, this.avatar);
-}
-
-class _MissionRow extends StatelessWidget {
-  final MissionModel mission;
-  const _MissionRow({required this.mission});
+class _TaskRow extends ConsumerWidget {
+  final RaffleEntryTask task;
+  final String raffleId;
+  final Color color;
+  const _TaskRow({required this.task, required this.raffleId, required this.color});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Row(
       children: [
         AnimatedContainer(
           duration: const Duration(milliseconds: 300),
-          width: 24, height: 24,
+          width: 24,
+          height: 24,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: mission.completed ? AppColors.green : AppColors.surfaceSecondary,
-            border: mission.completed ? null : Border.all(color: AppColors.border, width: 1.5),
+            color: task.isCompleted ? AppColors.success : Colors.transparent,
+            border: task.isCompleted ? null : Border.all(color: AppColors.border, width: 1.5),
           ),
-          child: mission.completed ? const Icon(Icons.check_rounded, size: 14, color: Colors.white) : null,
+          child: task.isCompleted ? const Icon(Icons.check_rounded, size: 14, color: Colors.white) : null,
         ),
+        const SizedBox(width: 10),
+        Icon(task.icon, size: 16, color: task.isCompleted ? AppColors.textTertiary : AppColors.textSecondary),
         const SizedBox(width: 8),
-        Text(mission.icon, style: const TextStyle(fontSize: 16)),
-        const SizedBox(width: 6),
         Expanded(
-          child: Text(
-            mission.title,
-            style: TextStyle(
-              fontSize: 13, fontWeight: FontWeight.w500,
-              color: mission.completed ? AppColors.textTertiary : AppColors.textPrimary,
-              decoration: mission.completed ? TextDecoration.lineThrough : null,
-              decorationColor: AppColors.textTertiary,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                task.title,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: task.isCompleted ? AppColors.textTertiary : AppColors.textPrimary,
+                  decoration: task.isCompleted ? TextDecoration.lineThrough : null,
+                  decorationColor: AppColors.textTertiary,
+                ),
+              ),
+              if (!task.isCompleted && task.requiredCount > 1)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, right: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(2),
+                          child: LinearProgressIndicator(
+                            value: task.progress,
+                            minHeight: 3,
+                            backgroundColor: AppColors.surfaceLight,
+                            valueColor: AlwaysStoppedAnimation(color),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text('${task.currentCount}/${task.requiredCount}', style: AppTypography.caption.copyWith(fontSize: 10)),
+                    ],
+                  ),
+                ),
+            ],
           ),
         ),
-        if (!mission.completed)
+        if (!task.isCompleted)
           GestureDetector(
-            onTap: () => _handleMissionAction(context, mission),
+            onTap: () async {
+              HapticFeedback.selectionClick();
+              if (task.type == RaffleTaskType.watchAds) {
+                await AdService.showRewardedAd(
+                  onRewarded: () {
+                    ref.read(rafflesProvider.notifier).completeTask(raffleId, task.id);
+                    HapticFeedback.mediumImpact();
+                  },
+                  onFailed: () {
+                    if (context.mounted) AppToast.show(context, message: 'Ad failed to load. Try again.', type: ToastType.error);
+                  },
+                );
+              } else if (task.type == RaffleTaskType.completeOffer) {
+                Navigator.of(context).push(AppPageRoute(page: const GamesScreen()));
+              } else if (task.type == RaffleTaskType.inviteFriend) {
+                final container = ProviderScope.containerOf(context);
+                container.read(currentTabProvider.notifier).state = 3;
+              } else if (task.type == RaffleTaskType.spinWheel) {
+                Navigator.of(context).push(AppPageRoute(page: const SpinWheelScreen()));
+              }
+            },
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(
-                color: AppColors.primary,
+                color: color.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: color.withValues(alpha: 0.3)),
               ),
-              child: const Text('Go', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white)),
+              child: Text(
+                task.type == RaffleTaskType.watchAds ? 'Watch' : 'Go',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color),
+              ),
             ),
           ),
       ],
     );
-  }
-
-  void _handleMissionAction(BuildContext context, MissionModel mission) {
-    HapticFeedback.selectionClick();
-    switch (mission.type) {
-      case MissionType.exercise:
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text('Go to Home and unlock apps with exercise!'),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          margin: const EdgeInsets.all(16),
-        ));
-        final ref = ProviderScope.containerOf(context);
-        ref.read(currentTabProvider.notifier).state = 0;
-        break;
-      case MissionType.watchAd:
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text('Go to Home and unlock apps by watching an ad!'),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          margin: const EdgeInsets.all(16),
-        ));
-        final ref = ProviderScope.containerOf(context);
-        ref.read(currentTabProvider.notifier).state = 0;
-        break;
-      case MissionType.spinWheel:
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SpinWheelPage()));
-        break;
-      case MissionType.inviteFriend:
-        final ref = ProviderScope.containerOf(context);
-        ref.read(currentTabProvider.notifier).state = 3;
-        break;
-      case MissionType.completeTask:
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TasksPage()));
-        break;
-    }
   }
 }
 
@@ -351,7 +368,7 @@ class _RaffleStat extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 15, color: AppColors.textTertiary),
+        Icon(icon, size: 14, color: AppColors.textTertiary),
         const SizedBox(width: 4),
         Text(label, style: AppTypography.labelSmall),
       ],

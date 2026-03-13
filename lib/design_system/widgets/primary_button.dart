@@ -5,78 +5,71 @@ import '../typography/app_typography.dart';
 
 class PrimaryButton extends StatelessWidget {
   final String label;
-  final VoidCallback onPressed;
-  final Color? color;
-  final double? width;
-  final double height;
+  final VoidCallback? onPressed;
+  final bool enabled;
+  final Gradient? gradient;
   final IconData? icon;
   final bool isLoading;
-  final bool enabled;
-  final bool outlined;
+  final double height;
 
   const PrimaryButton({
     super.key,
     required this.label,
-    required this.onPressed,
-    this.color,
-    this.width,
-    this.height = 56,
+    this.onPressed,
+    this.enabled = true,
+    this.gradient,
     this.icon,
     this.isLoading = false,
-    this.enabled = true,
-    this.outlined = false,
+    this.height = 52,
   });
 
   @override
   Widget build(BuildContext context) {
-    final buttonColor = color ?? AppColors.textPrimary;
+    final effectiveGradient = enabled
+        ? (gradient ?? AppColors.primaryGradient)
+        : null;
 
     return GestureDetector(
       onTap: enabled && !isLoading
           ? () {
               HapticFeedback.mediumImpact();
-              onPressed();
+              onPressed?.call();
             }
           : null,
-      child: AnimatedOpacity(
+      child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        opacity: enabled ? 1.0 : 0.4,
-        child: Container(
-          width: width ?? double.infinity,
-          height: height,
-          decoration: BoxDecoration(
-            color: outlined ? Colors.transparent : buttonColor,
-            borderRadius: BorderRadius.circular(16),
-            border: outlined
-                ? Border.all(color: AppColors.border, width: 1.5)
-                : null,
-          ),
-          child: Center(
-            child: isLoading
-                ? SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: outlined ? buttonColor : Colors.white,
-                    ),
-                  )
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (icon != null) ...[
-                        Icon(icon, color: outlined ? buttonColor : Colors.white, size: 20),
-                        const SizedBox(width: 8),
-                      ],
-                      Text(
-                        label,
-                        style: AppTypography.button.copyWith(
-                          color: outlined ? AppColors.textPrimary : Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
+        width: double.infinity,
+        height: height,
+        decoration: BoxDecoration(
+          gradient: effectiveGradient,
+          color: enabled ? null : AppColors.surfaceLight,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (isLoading)
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            else ...[
+              if (icon != null) ...[
+                Icon(icon, color: enabled ? Colors.white : AppColors.textTertiary, size: 20),
+                const SizedBox(width: 10),
+              ],
+              Text(
+                label,
+                style: AppTypography.button.copyWith(
+                  color: enabled ? Colors.white : AppColors.textTertiary,
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
