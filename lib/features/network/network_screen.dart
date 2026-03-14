@@ -121,7 +121,12 @@ class NetworkScreen extends ConsumerWidget {
                           GestureDetector(
                             onTap: () {
                               HapticFeedback.mediumImpact();
-                              Share.share('Join DoomScroll and earn points! Use my code: ${user.referralCode}\nhttps://doomscroll.app/ref/${user.referralCode}');
+                              Share.share(
+                                'I earned ${Formatters.number(wallet.totalPoints)} points just by using my phone! 🤯\n\n'
+                                'DoomScroll turns your screen time into real rewards — gift cards, cash & more.\n\n'
+                                'Use my code: ${user.referralCode}\n'
+                                'https://doomscroll.app/ref/${user.referralCode}',
+                              );
                             },
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),

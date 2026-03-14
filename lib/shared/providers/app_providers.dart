@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/economy_constants.dart';
 import '../../models/user_model.dart';
@@ -12,6 +13,8 @@ import '../../models/partner_offer_model.dart';
 import '../../models/redeemed_card_model.dart';
 import '../../models/streak_model.dart';
 import '../../models/cash_out_model.dart';
+import '../../models/daily_goal_model.dart';
+import '../../models/rank_model.dart';
 import '../../mock_data/mock_data.dart';
 import '../../services/offerwall_service.dart';
 
@@ -77,13 +80,34 @@ class WalletNotifier extends StateNotifier<WalletModel> {
   }
 }
 
-// ─── Streak ───
+// ─── Streak (Duolingo-level) ───
 final streakProvider = StateNotifierProvider<StreakNotifier, StreakModel>(
   (ref) => StreakNotifier(),
 );
 
 class StreakNotifier extends StateNotifier<StreakModel> {
-  StreakNotifier() : super(const StreakModel(currentStreak: 3, longestStreak: 12));
+  StreakNotifier()
+      : super(StreakModel(
+          currentStreak: 3,
+          longestStreak: 12,
+          claimHistory: _generateMockHistory(),
+        ));
+
+  static List<DateTime> _generateMockHistory() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    // Mock: active for the last 3 days
+    return [
+      today.subtract(const Duration(days: 1)),
+      today.subtract(const Duration(days: 2)),
+      today.subtract(const Duration(days: 3)),
+      today.subtract(const Duration(days: 5)),
+      today.subtract(const Duration(days: 6)),
+      today.subtract(const Duration(days: 10)),
+      today.subtract(const Duration(days: 11)),
+      today.subtract(const Duration(days: 12)),
+    ];
+  }
 
   void recordClaim() {
     final now = DateTime.now();
@@ -104,17 +128,79 @@ class StreakNotifier extends StateNotifier<StreakModel> {
       newStreak = 1;
     }
 
-    final newLongest = newStreak > state.longestStreak ? newStreak : state.longestStreak;
+    final newLongest =
+        newStreak > state.longestStreak ? newStreak : state.longestStreak;
+
+    // Add today to claim history (keep last 30 days)
+    final newHistory = [now, ...state.claimHistory]
+        .where((d) => now.difference(d).inDays <= 30)
+        .toList();
+
     state = state.copyWith(
       currentStreak: newStreak,
       longestStreak: newLongest,
       lastClaimDate: now,
+      claimHistory: newHistory,
+      streakAtRisk: false,
+      streakLostDate: null,
+    );
+  }
+
+  void buyFreeze() {
+    state = state.copyWith(
+      freezesOwned: state.freezesOwned + 1,
+    );
+  }
+
+  void useFreeze() {
+    if (state.freezesOwned <= 0) return;
+    state = state.copyWith(
+      freezesOwned: state.freezesOwned - 1,
+      freezeActiveToday: true,
+    );
+  }
+
+  /// Called at the start of each day to check streak status
+  void checkStreakStatus() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    if (state.lastClaimDate == null) return;
+
+    final lastDate = DateTime(
+      state.lastClaimDate!.year,
+      state.lastClaimDate!.month,
+      state.lastClaimDate!.day,
+    );
+    final diff = today.difference(lastDate).inDays;
+
+    if (diff > 1 && !state.freezeActiveToday) {
+      if (state.freezesOwned > 0) {
+        // Auto-use a freeze
+        useFreeze();
+      } else {
+        // Streak is broken
+        state = state.copyWith(
+          streakAtRisk: true,
+          streakLostDate: now,
+        );
+      }
+    }
+  }
+
+  /// Recover a lost streak by watching ads
+  void recoverStreak() {
+    if (!state.canRecover) return;
+    state = state.copyWith(
+      streakAtRisk: false,
+      streakLostDate: null,
     );
   }
 }
 
 // ─── Screen Time ───
-final screenTimeProvider = StateNotifierProvider<ScreenTimeNotifier, ScreenTimeModel>(
+final screenTimeProvider =
+    StateNotifierProvider<ScreenTimeNotifier, ScreenTimeModel>(
   (ref) => ScreenTimeNotifier(),
 );
 
@@ -143,7 +229,8 @@ class ScreenTimeNotifier extends StateNotifier<ScreenTimeModel> {
 }
 
 // ─── Raffles ───
-final rafflesProvider = StateNotifierProvider<RafflesNotifier, List<RaffleModel>>(
+final rafflesProvider =
+    StateNotifierProvider<RafflesNotifier, List<RaffleModel>>(
   (ref) => RafflesNotifier(),
 );
 
@@ -177,7 +264,8 @@ class RafflesNotifier extends StateNotifier<List<RaffleModel>> {
 }
 
 // ─── Referral Network ───
-final referralLevelsProvider = StateNotifierProvider<ReferralLevelsNotifier, List<ReferralLevelModel>>(
+final referralLevelsProvider =
+    StateNotifierProvider<ReferralLevelsNotifier, List<ReferralLevelModel>>(
   (ref) => ReferralLevelsNotifier(),
 );
 
@@ -204,14 +292,18 @@ class ReferralLevelsNotifier extends StateNotifier<List<ReferralLevelModel>> {
 }
 
 final totalPendingReferralPoints = Provider<int>((ref) {
-  return ref.watch(referralLevelsProvider).fold(0, (sum, l) => sum + l.pendingPoints);
+  return ref
+      .watch(referralLevelsProvider)
+      .fold(0, (sum, l) => sum + l.pendingPoints);
 });
 
 // ─── Gift Cards ───
-final giftCardsProvider = StateProvider<List<GiftCardModel>>((ref) => MockData.giftCards);
+final giftCardsProvider =
+    StateProvider<List<GiftCardModel>>((ref) => MockData.giftCards);
 
 // ─── Redeemed Cards ───
-final redeemedCardsProvider = StateNotifierProvider<RedeemedCardsNotifier, List<RedeemedCardModel>>(
+final redeemedCardsProvider =
+    StateNotifierProvider<RedeemedCardsNotifier, List<RedeemedCardModel>>(
   (ref) => RedeemedCardsNotifier(),
 );
 
@@ -224,10 +316,12 @@ class RedeemedCardsNotifier extends StateNotifier<List<RedeemedCardModel>> {
 }
 
 // ─── Partner Offers ───
-final partnerOffersProvider = StateProvider<List<PartnerOfferModel>>((ref) => MockData.partnerOffers);
+final partnerOffersProvider =
+    StateProvider<List<PartnerOfferModel>>((ref) => MockData.partnerOffers);
 
 // ─── Offerwall ───
-final offerwallProvider = StateNotifierProvider<OfferwallNotifier, List<OfferwallItemModel>>(
+final offerwallProvider =
+    StateNotifierProvider<OfferwallNotifier, List<OfferwallItemModel>>(
   (ref) => OfferwallNotifier(),
 );
 
@@ -250,7 +344,8 @@ class OfferwallNotifier extends StateNotifier<List<OfferwallItemModel>> {
 }
 
 // ─── Cash Out Requests ───
-final cashOutRequestsProvider = StateNotifierProvider<CashOutNotifier, List<CashOutRequest>>(
+final cashOutRequestsProvider =
+    StateNotifierProvider<CashOutNotifier, List<CashOutRequest>>(
   (ref) => CashOutNotifier(),
 );
 
@@ -263,7 +358,8 @@ class CashOutNotifier extends StateNotifier<List<CashOutRequest>> {
 }
 
 // ─── Spin Wheel ───
-final spinsRemainingProvider = StateProvider<int>((ref) => EconomyConstants.maxSpinsPerDay);
+final spinsRemainingProvider =
+    StateProvider<int>((ref) => EconomyConstants.maxSpinsPerDay);
 final spinResultProvider = StateProvider<int?>((ref) => null);
 
 int generateWeightedSpinResult() {
@@ -277,3 +373,58 @@ int generateWeightedSpinResult() {
   }
   return prizes.last.value;
 }
+
+// ─── Daily Goals ───
+final dailyGoalsProvider =
+    StateNotifierProvider<DailyGoalsNotifier, DailyGoalsState>(
+  (ref) => DailyGoalsNotifier(),
+);
+
+class DailyGoalsNotifier extends StateNotifier<DailyGoalsState> {
+  DailyGoalsNotifier()
+      : super(DailyGoalsState(
+          goals: DailyGoalsState.defaultGoals(),
+          date: DateTime.now(),
+        ));
+
+  void completeGoal(DailyGoalType type) {
+    state = state.copyWith(
+      goals: [
+        for (final g in state.goals)
+          if (g.type == type && !g.isCompleted)
+            g.copyWith(currentCount: g.currentCount + 1)
+          else
+            g,
+      ],
+    );
+  }
+
+  void claimDailyBonus() {
+    state = state.copyWith(dailyBonusClaimed: true);
+  }
+
+  void resetForNewDay() {
+    state = DailyGoalsState(
+      goals: DailyGoalsState.defaultGoals(),
+      date: DateTime.now(),
+    );
+  }
+}
+
+// ─── Rank / Level ───
+final rankProvider = StateNotifierProvider<RankNotifier, RankModel>(
+  (ref) => RankNotifier(),
+);
+
+class RankNotifier extends StateNotifier<RankModel> {
+  RankNotifier() : super(const RankModel(totalPointsEarned: 34500));
+
+  void addPoints(int pts) {
+    state = state.copyWith(
+      totalPointsEarned: state.totalPointsEarned + pts,
+    );
+  }
+}
+
+// ─── Sessions Today Counter ───
+final sessionsClaimedTodayProvider = StateProvider<int>((ref) => 0);

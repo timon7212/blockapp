@@ -16,4 +16,9 @@ class AppConstants {
   static const int weeklyRaffleTasksRequired = 1;
   static const int monthlyRaffleAdsRequired = 15;
   static const int monthlyRaffleTasksRequired = 3;
+
+  // ─── Notification Intervals ───
+  static const int streakReminderHour = 20; // 8 PM
+  static const int morningMotivationHour = 9;
+  static const int pointsReadyReminderMinutes = 30; // after session cap
 }
