@@ -14,11 +14,13 @@ enum AuthStatus { initial, authenticated, unauthenticated, loading }
 class AuthState {
   final AuthStatus status;
   final UserProfileDto? user;
+  final UserSummaryDto? userSummary; // from auth response (lighter)
   final String? error;
 
   const AuthState({
     this.status = AuthStatus.initial,
     this.user,
+    this.userSummary,
     this.error,
   });
 
@@ -26,14 +28,22 @@ class AuthState {
   bool get isLoading => status == AuthStatus.loading;
   bool get isInitial => status == AuthStatus.initial;
 
+  /// Use full profile if available, otherwise summary.
+  String get displayName =>
+      user?.displayName ?? userSummary?.displayName ?? '';
+  String get email => user?.email ?? userSummary?.email ?? '';
+  bool get onboardingComplete => user?.onboardingComplete ?? false;
+
   AuthState copyWith({
     AuthStatus? status,
     UserProfileDto? user,
+    UserSummaryDto? userSummary,
     String? error,
   }) =>
       AuthState(
         status: status ?? this.status,
         user: user ?? this.user,
+        userSummary: userSummary ?? this.userSummary,
         error: error,
       );
 }
@@ -69,9 +79,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await TokenService.clearTokens();
       state = const AuthState(status: AuthStatus.unauthenticated);
     } catch (e) {
-      // Network error but token exists — still "authenticated" (offline)
-      debugPrint('Auto-login failed: $e');
-      state = const AuthState(status: AuthStatus.unauthenticated);
+      debugPrint('Auto-login getProfile failed: $e');
+      // Token exists but getProfile failed (maybe network issue).
+      // Still authenticate — the user can try refreshing later.
+      state = const AuthState(status: AuthStatus.authenticated);
     }
   }
 
@@ -84,24 +95,29 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }) async {
     state = state.copyWith(status: AuthStatus.loading, error: null);
     try {
-      await _authRepo.register(RegisterRequest(
+      final authResponse = await _authRepo.register(RegisterRequest(
         email: email,
         password: password,
         displayName: displayName,
         referralCode: referralCode,
       ));
-      // After register, load full profile
-      final profile = await _userRepo.getProfile();
+
+      // Use the user data from auth response directly — no extra API call!
       state = AuthState(
         status: AuthStatus.authenticated,
-        user: profile,
+        userSummary: authResponse.user,
       );
+
+      // Try loading full profile in background (non-blocking)
+      _loadProfileInBackground();
     } on ApiException catch (e) {
       state = state.copyWith(
           status: AuthStatus.unauthenticated, error: e.message);
     } catch (e) {
+      debugPrint('Register error: $e');
       state = state.copyWith(
-          status: AuthStatus.unauthenticated, error: e.toString());
+          status: AuthStatus.unauthenticated,
+          error: 'Registration failed. Please try again.');
     }
   }
 
@@ -112,21 +128,27 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }) async {
     state = state.copyWith(status: AuthStatus.loading, error: null);
     try {
-      await _authRepo.login(LoginRequest(
+      final authResponse = await _authRepo.login(LoginRequest(
         email: email,
         password: password,
       ));
-      final profile = await _userRepo.getProfile();
+
+      // Use the user data from auth response directly!
       state = AuthState(
         status: AuthStatus.authenticated,
-        user: profile,
+        userSummary: authResponse.user,
       );
+
+      // Try loading full profile in background
+      _loadProfileInBackground();
     } on ApiException catch (e) {
       state = state.copyWith(
           status: AuthStatus.unauthenticated, error: e.message);
     } catch (e) {
+      debugPrint('Login error: $e');
       state = state.copyWith(
-          status: AuthStatus.unauthenticated, error: e.toString());
+          status: AuthStatus.unauthenticated,
+          error: 'Login failed. Please try again.');
     }
   }
 
@@ -134,21 +156,25 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> googleSignIn(String idToken, {String? referralCode}) async {
     state = state.copyWith(status: AuthStatus.loading, error: null);
     try {
-      await _authRepo.googleSignIn(GoogleSignInRequest(
+      final authResponse = await _authRepo.googleSignIn(GoogleSignInRequest(
         idToken: idToken,
         referralCode: referralCode,
       ));
-      final profile = await _userRepo.getProfile();
+
       state = AuthState(
         status: AuthStatus.authenticated,
-        user: profile,
+        userSummary: authResponse.user,
       );
+
+      _loadProfileInBackground();
     } on ApiException catch (e) {
       state = state.copyWith(
           status: AuthStatus.unauthenticated, error: e.message);
     } catch (e) {
+      debugPrint('Google sign-in error: $e');
       state = state.copyWith(
-          status: AuthStatus.unauthenticated, error: e.toString());
+          status: AuthStatus.unauthenticated,
+          error: 'Google sign-in failed. Please try again.');
     }
   }
 
@@ -163,12 +189,29 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final profile = await _userRepo.getProfile();
       state = state.copyWith(user: profile);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Refresh profile failed: $e');
+    }
   }
 
   /// Clear error message.
   void clearError() {
     state = state.copyWith(error: null);
+  }
+
+  /// Loads full profile in background without blocking the UI.
+  void _loadProfileInBackground() {
+    Future.microtask(() async {
+      try {
+        final profile = await _userRepo.getProfile();
+        if (mounted) {
+          state = state.copyWith(user: profile);
+        }
+      } catch (e) {
+        debugPrint('Background profile load failed: $e');
+        // Non-critical — user is already authenticated with summary data
+      }
+    });
   }
 }
 

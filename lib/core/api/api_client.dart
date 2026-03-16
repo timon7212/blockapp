@@ -233,8 +233,8 @@ class _ErrorInterceptor extends Interceptor {
 
       apiException = switch (status) {
         400 => BadRequestException(msg, data: err.response!.data),
-        401 => const UnauthorizedException(),
-        403 => const ForbiddenException(),
+        401 => UnauthorizedException(msg),
+        403 => ForbiddenException(msg),
         404 => NotFoundException(msg),
         409 => ConflictException(msg),
         429 => const RateLimitException(),
@@ -251,6 +251,7 @@ class _ErrorInterceptor extends Interceptor {
         response: err.response,
         type: err.type,
         error: apiException,
+        message: apiException.message,
       ),
     );
   }
@@ -262,6 +263,9 @@ class _LogInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     debugPrint('→ ${options.method} ${options.uri}');
+    if (options.data != null) {
+      debugPrint('  body: ${options.data}');
+    }
     handler.next(options);
   }
 
@@ -274,7 +278,13 @@ class _LogInterceptor extends Interceptor {
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
     debugPrint(
-        '✕ ${err.response?.statusCode ?? "?"} ${err.requestOptions.uri}: ${err.message}');
+        '✕ ${err.response?.statusCode ?? "?"} ${err.requestOptions.uri}');
+    if (err.response?.data != null) {
+      debugPrint('  response: ${err.response!.data}');
+    }
+    if (err.error is ApiException) {
+      debugPrint('  error: ${(err.error as ApiException).message}');
+    }
     handler.next(err);
   }
 }

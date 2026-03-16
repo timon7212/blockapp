@@ -39,14 +39,17 @@ class _DoomScrollAppState extends ConsumerState<DoomScrollApp> {
     );
 
     Widget home;
-    if (authState.isInitial || authState.isLoading) {
+    if (authState.isInitial) {
       // Splash / loading while checking token
       home = const _SplashScreen();
     } else if (!authState.isAuthenticated) {
       home = const AuthScreen();
-    } else if (authState.user != null && !authState.user!.onboardingComplete) {
+    } else if (authState.onboardingComplete == false &&
+        authState.user != null) {
+      // Only show onboarding if we have full profile and it's not complete
       home = const OnboardingScreen();
     } else {
+      // Authenticated → show main app (even if profile hasn't loaded yet)
       home = const AppShell();
     }
 
