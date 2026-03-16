@@ -58,22 +58,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     final authState = ref.watch(authNotifierProvider);
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
-    // Show error snackbar
-    ref.listen<AuthState>(authNotifierProvider, (prev, next) {
-      if (next.error != null && next.error != prev?.error) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(next.error!),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.all(16),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-        ref.read(authNotifierProvider.notifier).clearError();
-      }
-    });
+    // Error is now shown as an inline banner in the form
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -185,8 +170,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                               setState(() => _obscure = !_obscure),
                         ),
                         validator: (v) {
-                          if (v == null || v.length < 6) {
-                            return 'Password must be at least 6 characters';
+                          if (v == null || v.length < 8) {
+                            return 'Password must be at least 8 characters';
                           }
                           return null;
                         },
@@ -203,6 +188,44 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     ],
                   ),
                 ),
+
+                // ── Error Banner ──
+                if (authState.error != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: AppColors.error.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline_rounded,
+                            color: AppColors.error, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            authState.error!,
+                            style: AppTypography.bodySmall.copyWith(
+                              color: AppColors.error,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => ref
+                              .read(authNotifierProvider.notifier)
+                              .clearError(),
+                          child: const Icon(Icons.close_rounded,
+                              color: AppColors.error, size: 18),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
 
                 const SizedBox(height: 28),
 
