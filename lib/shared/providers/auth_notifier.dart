@@ -199,6 +199,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(error: null);
   }
 
+  /// Dev-mode bypass: skip auth and enter the app with mock data.
+  /// Use this when the backend is down or for UI testing.
+  void devBypass() {
+    state = AuthState(
+      status: AuthStatus.authenticated,
+      user: UserProfileDto(
+        id: 'dev-user-001',
+        email: 'dev@doomscroll.app',
+        displayName: 'Dev Tester',
+        avatarUrl: null,
+        referralCode: 'DEVCODE',
+        directInvites: 3,
+        joinedAt: DateTime.now().subtract(const Duration(days: 30)),
+        totalPoints: 4250,
+        uncollectedPoints: 150,
+        currentStreak: 7,
+        onboardingComplete: true,
+        trackedAppIds: ['instagram', 'tiktok', 'youtube'],
+      ),
+    );
+  }
+
   /// Loads full profile in background without blocking the UI.
   void _loadProfileInBackground() {
     Future.microtask(() async {
