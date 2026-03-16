@@ -104,7 +104,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 class _TopBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final wallet = ref.watch(walletProvider);
+    final walletAsync = ref.watch(apiWalletProvider);
     final rank = ref.watch(rankProvider);
 
     return Padding(
@@ -123,6 +123,49 @@ class _TopBar extends ConsumerWidget {
                       style: AppTypography.caption.copyWith(
                         color: AppColors.textTertiary,
                         fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // API status indicator
+                    walletAsync.when(
+                      data: (_) => Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text('API ✓',
+                            style: TextStyle(
+                                fontSize: 9,
+                                color: AppColors.success,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                      loading: () => Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text('API...',
+                            style: TextStyle(
+                                fontSize: 9,
+                                color: Colors.amber,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                      error: (_, __) => Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.error.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text('API ✕',
+                            style: TextStyle(
+                                fontSize: 9,
+                                color: AppColors.error,
+                                fontWeight: FontWeight.w700)),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -148,41 +191,57 @@ class _TopBar extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  Formatters.number(wallet.totalPoints),
-                  style: AppTypography.number.copyWith(fontSize: 32),
+                walletAsync.when(
+                  data: (w) => Text(
+                    Formatters.number(w.totalPoints),
+                    style: AppTypography.number.copyWith(fontSize: 32),
+                  ),
+                  loading: () => Text(
+                    '...',
+                    style: AppTypography.number.copyWith(fontSize: 32),
+                  ),
+                  error: (e, _) => Text(
+                    'N/A',
+                    style: AppTypography.number
+                        .copyWith(fontSize: 32, color: AppColors.textTertiary),
+                  ),
                 ),
               ],
             ),
           ),
-          if (wallet.todayEarned > 0)
-            Container(
-              margin: const EdgeInsets.only(top: 4),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.success.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                    color: AppColors.success.withValues(alpha: 0.2)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.arrow_upward_rounded,
-                      size: 14, color: AppColors.success),
-                  const SizedBox(width: 4),
-                  Text(
-                    '+${Formatters.number(wallet.todayEarned)} today',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.success,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          walletAsync.whenOrNull(
+                data: (w) => w.todayPoints > 0
+                    ? Container(
+                        margin: const EdgeInsets.only(top: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                              color:
+                                  AppColors.success.withValues(alpha: 0.2)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.arrow_upward_rounded,
+                                size: 14, color: AppColors.success),
+                            const SizedBox(width: 4),
+                            Text(
+                              '+${Formatters.number(w.todayPoints)} today',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.success,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : null,
+              ) ??
+              const SizedBox.shrink(),
         ],
       ),
     ).animate().fadeIn(duration: 400.ms).slideY(begin: -0.1, end: 0);

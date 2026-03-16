@@ -72,7 +72,12 @@ class _SpinWheelScreenState extends ConsumerState<SpinWheelScreen>
     final result = generateWeightedSpinResult();
     final prizeIndex = EconomyConstants.spinWheelPrizes.indexWhere((p) => p.value == result);
     final segmentAngle = 2 * pi / EconomyConstants.spinWheelPrizes.length;
-    final targetAngle = _currentAngle + (2 * pi * 5) + (segmentAngle * prizeIndex) + (segmentAngle / 2);
+    // Calculate the exact angle where this prize sector is under the pointer
+    final desiredFinalAngle = (prizeIndex + 0.5) * segmentAngle;
+    final currentMod = _currentAngle % (2 * pi);
+    var delta = desiredFinalAngle - currentMod;
+    if (delta < 0) delta += 2 * pi; // always spin forward
+    final targetAngle = _currentAngle + (2 * pi * 5) + delta;
 
     _spinController.reset();
     final animation = Tween<double>(
