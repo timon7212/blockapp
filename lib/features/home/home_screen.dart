@@ -4,6 +4,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:percent_indicator/circular_percent_indicator.dart';
 import '../../shared/providers/app_providers.dart';
+import '../../shared/providers/api_providers.dart';
+import '../../shared/providers/auth_notifier.dart';
 import '../../design_system/colors/app_colors.dart';
 import '../../design_system/typography/app_typography.dart';
 import '../../design_system/widgets/glass_card.dart';
@@ -52,7 +54,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           color: AppColors.primary,
           backgroundColor: AppColors.surface,
           onRefresh: () async {
-            await Future.delayed(const Duration(milliseconds: 800));
+            // Refresh all API data
+            ref.invalidate(apiWalletProvider);
+            ref.invalidate(apiDailyStatsProvider);
+            ref.invalidate(apiStreakProvider);
+            ref.read(authNotifierProvider.notifier).refreshProfile();
+            await Future.delayed(const Duration(milliseconds: 500));
             if (context.mounted) {
               AppToast.show(context,
                   message: 'Refreshed!', type: ToastType.success);

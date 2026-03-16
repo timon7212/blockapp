@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:confetti/confetti.dart';
-import '../../shared/providers/app_providers.dart';
+import '../../shared/providers/auth_notifier.dart';
 import '../../design_system/colors/app_colors.dart';
 import '../../design_system/typography/app_typography.dart';
 import '../../design_system/widgets/primary_button.dart';
@@ -12,7 +12,8 @@ import '../../design_system/widgets/surface_card.dart';
 import '../../design_system/widgets/gradient_background.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/constants/economy_constants.dart';
-import '../../models/wallet_model.dart';
+import '../../data/dto/user_dto.dart';
+import '../../data/repositories/user_repository.dart';
 
 /// Streamlined 6-step onboarding:
 ///
@@ -54,6 +55,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
 
   // Welcome bonus
   static const int _welcomeBonus = 500;
+  // ignore: unused_field
   bool _bonusClaimed = false;
 
   @override
@@ -86,18 +88,25 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
     if (_page < _totalPages - 1) _goTo(_page + 1);
   }
 
-  void _complete() {
+  void _complete() async {
     HapticFeedback.heavyImpact();
-    // Grant welcome bonus
-    if (!_bonusClaimed) {
-      _bonusClaimed = true;
-      ref.read(walletProvider.notifier).addPoints(
-            _welcomeBonus,
-            'Welcome bonus 🎁',
-            TransactionType.offerwall,
-          );
+    _bonusClaimed = true;
+
+    // Call API to complete onboarding
+    try {
+      final userRepo = UserRepository();
+      await userRepo.completeOnboarding(OnboardingRequest(
+        trackedAppIds: ['instagram', 'tiktok', 'twitter', 'snapchat'],
+        goal: _dailyMinutes != null
+            ? 'reduce_${_dailyMinutes}min'
+            : 'reduce_general',
+      ));
+    } catch (_) {
+      // Continue even if API call fails
     }
-    ref.read(onboardingCompleteProvider.notifier).state = true;
+
+    // Refresh profile to get onboardingComplete = true
+    ref.read(authNotifierProvider.notifier).refreshProfile();
   }
 
   int get _dailyPts {

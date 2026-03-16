@@ -2,18 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'design_system/theme/app_theme.dart';
-import 'shared/providers/app_providers.dart';
+import 'shared/providers/auth_notifier.dart';
 import 'features/shell/app_shell.dart';
 import 'features/onboarding/onboarding_screen.dart';
 import 'features/auth/auth_screen.dart';
+import 'shared/widgets/async_value_widget.dart';
 
-class DoomScrollApp extends ConsumerWidget {
+class DoomScrollApp extends ConsumerStatefulWidget {
   const DoomScrollApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isAuthenticated = ref.watch(authProvider);
-    final onboardingComplete = ref.watch(onboardingCompleteProvider);
+  ConsumerState<DoomScrollApp> createState() => _DoomScrollAppState();
+}
+
+class _DoomScrollAppState extends ConsumerState<DoomScrollApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Try auto-login on startup
+    Future.microtask(() {
+      ref.read(authNotifierProvider.notifier).tryAutoLogin();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final authState = ref.watch(authNotifierProvider);
 
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
@@ -25,9 +39,12 @@ class DoomScrollApp extends ConsumerWidget {
     );
 
     Widget home;
-    if (!isAuthenticated) {
+    if (authState.isInitial || authState.isLoading) {
+      // Splash / loading while checking token
+      home = const _SplashScreen();
+    } else if (!authState.isAuthenticated) {
       home = const AuthScreen();
-    } else if (!onboardingComplete) {
+    } else if (authState.user != null && !authState.user!.onboardingComplete) {
       home = const OnboardingScreen();
     } else {
       home = const AppShell();
@@ -38,6 +55,20 @@ class DoomScrollApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
       home: home,
+    );
+  }
+}
+
+class _SplashScreen extends StatelessWidget {
+  const _SplashScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: Color(0xFF09090B),
+      body: Center(
+        child: AppLoadingWidget(),
+      ),
     );
   }
 }

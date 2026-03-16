@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/providers/app_providers.dart';
+import '../../shared/providers/auth_notifier.dart';
 import '../../design_system/colors/app_colors.dart';
 import '../../design_system/typography/app_typography.dart';
 import '../../design_system/widgets/surface_card.dart';
@@ -218,6 +219,41 @@ class ProfileScreen extends ConsumerWidget {
                         label: 'About',
                         onTap: () => Navigator.of(context).push(AppPageRoute(page: const AboutScreen())),
                       ),
+                      Divider(height: 1, color: AppColors.border, indent: 52),
+                      _SettingTile(
+                        icon: Icons.logout_rounded,
+                        label: 'Sign Out',
+                        color: AppColors.error,
+                        onTap: () {
+                          showDialog(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              backgroundColor: AppColors.surface,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              title: const Text('Sign Out'),
+                              content: const Text('Are you sure you want to sign out?'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx),
+                                  child: const Text('Cancel'),
+                                ),
+                                FilledButton(
+                                  onPressed: () {
+                                    Navigator.pop(ctx);
+                                    ref.read(authNotifierProvider.notifier).logout();
+                                  },
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: AppColors.error,
+                                  ),
+                                  child: const Text('Sign Out'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -429,10 +465,12 @@ class _SettingTile extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  const _SettingTile({required this.icon, required this.label, required this.onTap});
+  final Color? color;
+  const _SettingTile({required this.icon, required this.label, required this.onTap, this.color});
 
   @override
   Widget build(BuildContext context) {
+    final c = color ?? AppColors.textSecondary;
     return GestureDetector(
       onTap: () {
         HapticFeedback.selectionClick();
@@ -443,9 +481,9 @@ class _SettingTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
-            Icon(icon, size: 20, color: AppColors.textSecondary),
+            Icon(icon, size: 20, color: c),
             const SizedBox(width: 14),
-            Text(label, style: AppTypography.bodyLarge.copyWith(color: AppColors.textPrimary)),
+            Text(label, style: AppTypography.bodyLarge.copyWith(color: color ?? AppColors.textPrimary)),
             const Spacer(),
             const Icon(Icons.chevron_right_rounded, size: 20, color: AppColors.textTertiary),
           ],

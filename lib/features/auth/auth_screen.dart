@@ -2,34 +2,91 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../shared/providers/app_providers.dart';
+import '../../shared/providers/auth_notifier.dart';
 import '../../design_system/colors/app_colors.dart';
 import '../../design_system/typography/app_typography.dart';
 import '../../design_system/widgets/gradient_background.dart';
 
-class AuthScreen extends ConsumerWidget {
+class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
 
-  void _signIn(WidgetRef ref) {
+  @override
+  ConsumerState<AuthScreen> createState() => _AuthScreenState();
+}
+
+class _AuthScreenState extends ConsumerState<AuthScreen> {
+  bool _isLogin = true;
+  final _formKey = GlobalKey<FormState>();
+  final _emailC = TextEditingController();
+  final _passwordC = TextEditingController();
+  final _nameC = TextEditingController();
+  final _referralC = TextEditingController();
+  bool _obscure = true;
+
+  @override
+  void dispose() {
+    _emailC.dispose();
+    _passwordC.dispose();
+    _nameC.dispose();
+    _referralC.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
     HapticFeedback.heavyImpact();
-    ref.read(authProvider.notifier).state = true;
+
+    final notifier = ref.read(authNotifierProvider.notifier);
+    if (_isLogin) {
+      notifier.login(
+        email: _emailC.text.trim(),
+        password: _passwordC.text,
+      );
+    } else {
+      notifier.register(
+        email: _emailC.text.trim(),
+        password: _passwordC.text,
+        displayName: _nameC.text.trim(),
+        referralCode:
+            _referralC.text.trim().isEmpty ? null : _referralC.text.trim(),
+      );
+    }
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final authState = ref.watch(authNotifierProvider);
     final bottomPadding = MediaQuery.of(context).padding.bottom;
+
+    // Show error snackbar
+    ref.listen<AuthState>(authNotifierProvider, (prev, next) {
+      if (next.error != null && next.error != prev?.error) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next.error!),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+        ref.read(authNotifierProvider.notifier).clearError();
+      }
+    });
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: GradientBackground(
         child: SafeArea(
           bottom: false,
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Column(
               children: [
-                const Spacer(flex: 2),
+                const SizedBox(height: 48),
 
+                // ── Logo ──
                 Text(
                   'DoomScroll',
                   style: AppTypography.displayLarge.copyWith(
@@ -40,96 +97,213 @@ class AuthScreen extends ConsumerWidget {
                 )
                     .animate()
                     .fadeIn(duration: 600.ms, curve: Curves.easeOut)
-                    .slideY(begin: -0.3, end: 0, duration: 600.ms, curve: Curves.easeOut),
+                    .slideY(begin: -0.3, end: 0, duration: 600.ms),
 
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
 
                 Text(
                   'Turn screen time into rewards',
-                  style: AppTypography.bodyLarge.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                )
-                    .animate()
-                    .fadeIn(delay: 200.ms, duration: 500.ms)
-                    .slideY(begin: -0.2, end: 0, delay: 200.ms, duration: 500.ms),
+                  style: AppTypography.bodyLarge
+                      .copyWith(color: AppColors.textSecondary),
+                ).animate().fadeIn(delay: 200.ms, duration: 500.ms),
 
-                const Spacer(flex: 2),
+                const SizedBox(height: 48),
 
+                // ── Toggle Login/Register ──
                 Container(
-                  width: 120,
-                  height: 120,
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        AppColors.primary.withValues(alpha: 0.15),
-                        AppColors.accent.withValues(alpha: 0.08),
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      _ToggleTab(
+                        label: 'Sign In',
+                        active: _isLogin,
+                        onTap: () => setState(() => _isLogin = true),
+                      ),
+                      _ToggleTab(
+                        label: 'Sign Up',
+                        active: !_isLogin,
+                        onTap: () => setState(() => _isLogin = false),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 28),
+
+                // ── Form ──
+                Form(
+                  key: _formKey,
+                  child: Column(
+                    children: [
+                      if (!_isLogin) ...[
+                        _InputField(
+                          controller: _nameC,
+                          label: 'Display Name',
+                          icon: Icons.person_outline_rounded,
+                          validator: (v) {
+                            if (v == null || v.trim().length < 2) {
+                              return 'Name must be at least 2 characters';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
                       ],
-                    ),
-                    border: Border.all(
-                      color: AppColors.primary.withValues(alpha: 0.12),
-                    ),
+
+                      _InputField(
+                        controller: _emailC,
+                        label: 'Email',
+                        icon: Icons.email_outlined,
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (v) {
+                          if (v == null || !v.contains('@')) {
+                            return 'Enter a valid email';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
+                      _InputField(
+                        controller: _passwordC,
+                        label: 'Password',
+                        icon: Icons.lock_outline_rounded,
+                        obscureText: _obscure,
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscure
+                                ? Icons.visibility_off_rounded
+                                : Icons.visibility_rounded,
+                            color: AppColors.textTertiary,
+                            size: 20,
+                          ),
+                          onPressed: () =>
+                              setState(() => _obscure = !_obscure),
+                        ),
+                        validator: (v) {
+                          if (v == null || v.length < 6) {
+                            return 'Password must be at least 6 characters';
+                          }
+                          return null;
+                        },
+                      ),
+
+                      if (!_isLogin) ...[
+                        const SizedBox(height: 16),
+                        _InputField(
+                          controller: _referralC,
+                          label: 'Referral Code (optional)',
+                          icon: Icons.card_giftcard_rounded,
+                        ),
+                      ],
+                    ],
                   ),
-                  child: Icon(
-                    Icons.bolt_rounded,
-                    size: 52,
-                    color: AppColors.primary.withValues(alpha: 0.7),
+                ),
+
+                const SizedBox(height: 28),
+
+                // ── Submit Button ──
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: FilledButton(
+                    onPressed: authState.isLoading ? null : _submit,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor:
+                          AppColors.primary.withValues(alpha: 0.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      textStyle: AppTypography.button,
+                    ),
+                    child: authState.isLoading
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2.5,
+                            ),
+                          )
+                        : Text(_isLogin ? 'Sign In' : 'Create Account'),
                   ),
-                )
-                    .animate(onPlay: (c) => c.repeat(reverse: true))
-                    .scaleXY(begin: 1, end: 1.05, duration: 2400.ms, curve: Curves.easeInOut)
-                    .animate()
-                    .fadeIn(delay: 400.ms, duration: 600.ms),
+                ),
 
-                const Spacer(flex: 3),
+                const SizedBox(height: 20),
 
-                _AuthButton(
-                  label: 'Continue with Apple',
-                  icon: Icons.apple,
-                  backgroundColor: Colors.white,
-                  textColor: Colors.black,
-                  iconColor: Colors.black,
-                  onTap: () => _signIn(ref),
-                )
-                    .animate()
-                    .fadeIn(delay: 500.ms, duration: 400.ms)
-                    .slideY(begin: 0.3, end: 0, delay: 500.ms, duration: 400.ms, curve: Curves.easeOut),
+                // ── Divider ──
+                Row(
+                  children: [
+                    Expanded(
+                        child: Divider(color: AppColors.border, thickness: 1)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'or continue with',
+                        style: AppTypography.caption
+                            .copyWith(color: AppColors.textTertiary),
+                      ),
+                    ),
+                    Expanded(
+                        child: Divider(color: AppColors.border, thickness: 1)),
+                  ],
+                ),
 
-                const SizedBox(height: 12),
+                const SizedBox(height: 20),
 
-                _AuthButton(
-                  label: 'Continue with Google',
-                  icon: Icons.g_mobiledata_rounded,
-                  backgroundColor: AppColors.surface,
-                  textColor: AppColors.textPrimary,
-                  iconColor: AppColors.textPrimary,
-                  borderColor: AppColors.border,
-                  onTap: () => _signIn(ref),
-                )
-                    .animate()
-                    .fadeIn(delay: 600.ms, duration: 400.ms)
-                    .slideY(begin: 0.3, end: 0, delay: 600.ms, duration: 400.ms, curve: Curves.easeOut),
-
-                const SizedBox(height: 12),
-
-                _AuthButton(
-                  label: 'Continue with Email',
-                  icon: Icons.email_outlined,
-                  backgroundColor: AppColors.surfaceMid,
-                  textColor: AppColors.textSecondary,
-                  iconColor: AppColors.textSecondary,
-                  borderColor: AppColors.border,
-                  onTap: () => _signIn(ref),
-                )
-                    .animate()
-                    .fadeIn(delay: 700.ms, duration: 400.ms)
-                    .slideY(begin: 0.3, end: 0, delay: 700.ms, duration: 400.ms, curve: Curves.easeOut),
+                // ── Social buttons ──
+                Row(
+                  children: [
+                    Expanded(
+                      child: _SocialButton(
+                        label: 'Google',
+                        icon: Icons.g_mobiledata_rounded,
+                        onTap: () {
+                          // TODO: Implement Google Sign-In when OAuth is set up
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text(
+                                  'Google Sign-In will be available soon'),
+                              behavior: SnackBarBehavior.floating,
+                              margin: const EdgeInsets.all(16),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _SocialButton(
+                        label: 'Apple',
+                        icon: Icons.apple,
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text(
+                                  'Apple Sign-In will be available soon'),
+                              behavior: SnackBarBehavior.floating,
+                              margin: const EdgeInsets.all(16),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
 
                 const SizedBox(height: 24),
 
+                // ── TOS ──
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
@@ -141,9 +315,7 @@ class AuthScreen extends ConsumerWidget {
                       height: 1.5,
                     ),
                   ),
-                )
-                    .animate()
-                    .fadeIn(delay: 900.ms, duration: 500.ms),
+                ),
 
                 SizedBox(height: bottomPadding + 24),
               ],
@@ -155,22 +327,116 @@ class AuthScreen extends ConsumerWidget {
   }
 }
 
-class _AuthButton extends StatelessWidget {
+// ─── Toggle Tab ───
+
+class _ToggleTab extends StatelessWidget {
   final String label;
-  final IconData icon;
-  final Color backgroundColor;
-  final Color textColor;
-  final Color iconColor;
-  final Color? borderColor;
+  final bool active;
   final VoidCallback onTap;
 
-  const _AuthButton({
+  const _ToggleTab({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: active ? AppColors.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: AppTypography.button.copyWith(
+                color: active ? Colors.white : AppColors.textTertiary,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Input Field ───
+
+class _InputField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+  final bool obscureText;
+  final TextInputType? keyboardType;
+  final Widget? suffixIcon;
+  final String? Function(String?)? validator;
+
+  const _InputField({
+    required this.controller,
     required this.label,
     required this.icon,
-    required this.backgroundColor,
-    required this.textColor,
-    required this.iconColor,
-    this.borderColor,
+    this.obscureText = false,
+    this.keyboardType,
+    this.suffixIcon,
+    this.validator,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: controller,
+      obscureText: obscureText,
+      keyboardType: keyboardType,
+      validator: validator,
+      style: AppTypography.bodyMedium.copyWith(color: AppColors.textPrimary),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle:
+            AppTypography.bodySmall.copyWith(color: AppColors.textTertiary),
+        prefixIcon: Icon(icon, color: AppColors.textTertiary, size: 20),
+        suffixIcon: suffixIcon,
+        filled: true,
+        fillColor: AppColors.surface,
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: AppColors.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: AppColors.error),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: AppColors.error, width: 1.5),
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      ),
+    );
+  }
+}
+
+// ─── Social Button ───
+
+class _SocialButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _SocialButton({
+    required this.label,
+    required this.icon,
     required this.onTap,
   });
 
@@ -179,23 +445,21 @@ class _AuthButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 56,
-        width: double.infinity,
+        height: 52,
         decoration: BoxDecoration(
-          color: backgroundColor,
+          color: AppColors.surface,
           borderRadius: BorderRadius.circular(14),
-          border: borderColor != null
-              ? Border.all(color: borderColor!)
-              : null,
+          border: Border.all(color: AppColors.border),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: iconColor, size: 24),
-            const SizedBox(width: 12),
+            Icon(icon, color: AppColors.textPrimary, size: 22),
+            const SizedBox(width: 8),
             Text(
               label,
-              style: AppTypography.button.copyWith(color: textColor),
+              style: AppTypography.button
+                  .copyWith(color: AppColors.textPrimary, fontSize: 14),
             ),
           ],
         ),
