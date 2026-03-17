@@ -1,0 +1,13 @@
+services:
+  api:
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USERNAME: manyboost
+      DB_PASSWORD: manyboost
+      DB_DATABASE: manyboost
+      DB_SYNCHRONIZE: "true"
+      DB_SSL: "false"

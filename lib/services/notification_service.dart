@@ -56,7 +56,7 @@ class NotificationService {
       ),
       NotificationTemplate(
         title: "Don't lose your $streakDays-day streak! 🔥",
-        body: 'Open DoomScroll and claim to protect your ${_multiplierForDays(streakDays)} multiplier.',
+        body: 'Open ManyBoost and claim to protect your ${_multiplierForDays(streakDays)} multiplier.',
         channel: NotifChannel.streak,
         priority: NotifPriority.critical,
       ),

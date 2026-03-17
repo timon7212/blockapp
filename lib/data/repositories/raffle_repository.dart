@@ -10,7 +10,18 @@ class RaffleRepository {
   Future<List<RaffleDto>> getActiveRaffles() async {
     try {
       final res = await _api.get(ApiEndpoints.raffles);
-      return (res.data as List<dynamic>)
+      final dynamic body = res.data;
+      List<dynamic> items;
+      if (body is List<dynamic>) {
+        items = body;
+      } else if (body is Map<String, dynamic>) {
+        items = (body['data'] as List<dynamic>?) ??
+            (body['raffles'] as List<dynamic>?) ??
+            [];
+      } else {
+        items = [];
+      }
+      return items
           .map((e) => RaffleDto.fromJson(e as Map<String, dynamic>))
           .toList();
     } on DioException catch (e) {
@@ -53,7 +64,18 @@ class RaffleRepository {
   Future<List<RaffleWinnerDto>> getRecentWinners() async {
     try {
       final res = await _api.get(ApiEndpoints.raffleWinners);
-      return (res.data as List<dynamic>)
+      final dynamic body = res.data;
+      List<dynamic> items;
+      if (body is List<dynamic>) {
+        items = body;
+      } else if (body is Map<String, dynamic>) {
+        items = (body['data'] as List<dynamic>?) ??
+            (body['winners'] as List<dynamic>?) ??
+            [];
+      } else {
+        items = [];
+      }
+      return items
           .map((e) => RaffleWinnerDto.fromJson(e as Map<String, dynamic>))
           .toList();
     } on DioException catch (e) {

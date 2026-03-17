@@ -16,6 +16,7 @@ import '../../data/dto/charity_dto.dart';
 import '../../data/dto/leaderboard_dto.dart';
 import '../../data/dto/config_dto.dart';
 import '../../data/dto/spin_dto.dart';
+import '../../data/dto/cashout_dto.dart';
 
 // ─── Repository singletons ───
 
@@ -132,4 +133,20 @@ final apiSpinPrizesProvider =
     FutureProvider<List<SpinPrizeDto>>((ref) async {
   debugPrint('📡 Fetching spin prizes from API...');
   return ref.read(eventsRepoProvider).getSpinPrizes();
+});
+
+// ─── Gift Card Redemption History ───
+
+final apiRedemptionHistoryProvider =
+    FutureProvider<List<RedemptionHistoryDto>>((ref) async {
+  debugPrint('📡 Fetching redemption history from API...');
+  return ref.read(storeRepoProvider).getRedemptionHistory();
+});
+
+// ─── Cash Out History ───
+
+final apiCashOutHistoryProvider =
+    FutureProvider<List<CashOutHistoryDto>>((ref) async {
+  debugPrint('📡 Fetching cash out history from API...');
+  return ref.read(storeRepoProvider).getCashOutHistory();
 });

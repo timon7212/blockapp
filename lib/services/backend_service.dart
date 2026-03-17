@@ -21,6 +21,6 @@ class BackendService {
 
   static Future<String> getReferralLink(String code) async {
     await Future.delayed(const Duration(milliseconds: 200));
-    return 'https://doomscroll.app/ref/$code';
+    return 'https://manyboost.io/ref/$code';
   }
 }

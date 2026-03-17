@@ -121,9 +121,13 @@ class _AuthInterceptor extends Interceptor {
       return handler.next(options);
     }
 
-    final token = await TokenService.getAccessToken();
-    if (token != null && token.isNotEmpty) {
-      options.headers['Authorization'] = 'Bearer $token';
+    try {
+      final token = await TokenService.getAccessToken();
+      if (token != null && token.isNotEmpty) {
+        options.headers['Authorization'] = 'Bearer $token';
+      }
+    } catch (e) {
+      debugPrint('[AuthInterceptor] Failed to read token: $e');
     }
 
     handler.next(options);
@@ -167,7 +171,12 @@ class _RefreshInterceptor extends Interceptor {
     _isRefreshing = true;
 
     try {
-      final refreshToken = await TokenService.getRefreshToken();
+      String? refreshToken;
+      try {
+        refreshToken = await TokenService.getRefreshToken();
+      } catch (e) {
+        debugPrint('[RefreshInterceptor] Failed to read refresh token: $e');
+      }
       if (refreshToken == null) {
         throw const SessionExpiredException();
       }

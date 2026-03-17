@@ -1,7 +1,7 @@
 class AppConstants {
   AppConstants._();
 
-  static const String appName = 'DoomScroll';
+  static const String appName = 'ManyBoost';
 
   static const int pointsPerMinute = 100;
   static const int maxAccumulationMinutes = 20;

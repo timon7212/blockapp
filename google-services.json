@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "665890154688",
+    "project_id": "manyboost-ds",
+    "storage_bucket": "manyboost-ds.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:665890154688:android:02e84c7bd4241b50eaa525",
+        "android_client_info": {
+          "package_name": "com.vitality.app.vitality"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBM8UZnjAV0W9SY1KTVVqVcjSMKoZKYWzs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -44,7 +44,19 @@ class EventsRepository {
   Future<List<SpinPrizeDto>> getSpinPrizes() async {
     try {
       final res = await _api.get(ApiEndpoints.spinPrizes);
-      return (res.data as List<dynamic>)
+      final dynamic body = res.data;
+      List<dynamic> items;
+      if (body is List<dynamic>) {
+        items = body;
+      } else if (body is Map<String, dynamic>) {
+        items = (body['data'] as List<dynamic>?) ??
+            (body['prizes'] as List<dynamic>?) ??
+            (body['items'] as List<dynamic>?) ??
+            [];
+      } else {
+        items = [];
+      }
+      return items
           .map((e) => SpinPrizeDto.fromJson(e as Map<String, dynamic>))
           .toList();
     } on DioException catch (e) {

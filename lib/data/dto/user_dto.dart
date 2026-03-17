@@ -11,6 +11,7 @@ class UserProfileDto {
   final int currentStreak;
   final bool onboardingComplete;
   final List<String> trackedAppIds;
+  final int spinsAvailable;
 
   const UserProfileDto({
     required this.id,
@@ -25,23 +26,31 @@ class UserProfileDto {
     required this.currentStreak,
     required this.onboardingComplete,
     required this.trackedAppIds,
+    this.spinsAvailable = 0,
   });
 
   factory UserProfileDto.fromJson(Map<String, dynamic> json) => UserProfileDto(
-        id: json['id'] as String,
-        email: json['email'] as String,
-        displayName: json['displayName'] as String,
-        avatarUrl: json['avatarUrl'] as String?,
-        referralCode: json['referralCode'] as String,
-        directInvites: (json['directInvites'] as num).toInt(),
-        joinedAt: DateTime.parse(json['joinedAt'] as String),
-        totalPoints: (json['totalPoints'] as num).toInt(),
-        uncollectedPoints: (json['uncollectedPoints'] as num).toInt(),
-        currentStreak: (json['currentStreak'] as num).toInt(),
-        onboardingComplete: json['onboardingComplete'] as bool,
-        trackedAppIds: (json['trackedAppIds'] as List<dynamic>)
-            .map((e) => e as String)
-            .toList(),
+        id: (json['id'] ?? json['_id'] ?? '').toString(),
+        email: (json['email'] ?? '').toString(),
+        displayName: (json['displayName'] ?? json['name'] ?? '').toString(),
+        avatarUrl: json['avatarUrl']?.toString(),
+        referralCode: (json['referralCode'] ?? '').toString(),
+        directInvites: (json['directInvites'] as num?)?.toInt() ?? 0,
+        joinedAt: json['joinedAt'] != null
+            ? DateTime.tryParse(json['joinedAt'].toString()) ?? DateTime.now()
+            : (json['createdAt'] != null
+                ? DateTime.tryParse(json['createdAt'].toString()) ??
+                    DateTime.now()
+                : DateTime.now()),
+        totalPoints: (json['totalPoints'] as num?)?.toInt() ?? 0,
+        uncollectedPoints: (json['uncollectedPoints'] as num?)?.toInt() ?? 0,
+        currentStreak: (json['currentStreak'] as num?)?.toInt() ?? 0,
+        onboardingComplete: json['onboardingComplete'] as bool? ?? false,
+        trackedAppIds: (json['trackedAppIds'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            [],
+        spinsAvailable: (json['spinsAvailable'] as num?)?.toInt() ?? 0,
       );
 }
 

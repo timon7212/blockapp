@@ -16,12 +16,14 @@ class DailyStatsDto {
   });
 
   factory DailyStatsDto.fromJson(Map<String, dynamic> json) => DailyStatsDto(
-        screenTimeMinutes: (json['screenTimeMinutes'] as num).toInt(),
-        pointsEarned: (json['pointsEarned'] as num).toInt(),
-        pointsCollected: (json['pointsCollected'] as num).toInt(),
-        uncollectedPoints: (json['uncollectedPoints'] as num).toInt(),
-        appBreakdown: json['appBreakdown'] as List<dynamic>,
-        date: DateTime.parse(json['date'] as String),
+        screenTimeMinutes: (json['screenTimeMinutes'] as num?)?.toInt() ?? 0,
+        pointsEarned: (json['pointsEarned'] as num?)?.toInt() ?? 0,
+        pointsCollected: (json['pointsCollected'] as num?)?.toInt() ?? 0,
+        uncollectedPoints: (json['uncollectedPoints'] as num?)?.toInt() ?? 0,
+        appBreakdown: (json['appBreakdown'] as List<dynamic>?) ?? [],
+        date: json['date'] != null
+            ? DateTime.tryParse(json['date'].toString()) ?? DateTime.now()
+            : DateTime.now(),
       );
 }
 
@@ -63,10 +65,11 @@ class StreakDto {
   });
 
   factory StreakDto.fromJson(Map<String, dynamic> json) => StreakDto(
-        currentStreak: (json['currentStreak'] as num).toInt(),
-        longestStreak: (json['longestStreak'] as num).toInt(),
-        multiplier: (json['multiplier'] as num).toDouble(),
-        collectedToday: json['collectedToday'] as bool,
-        nextMilestoneLabel: json['nextMilestoneLabel'] as String,
+        currentStreak: (json['currentStreak'] as num?)?.toInt() ?? 0,
+        longestStreak: (json['longestStreak'] as num?)?.toInt() ?? 0,
+        multiplier: (json['multiplier'] as num?)?.toDouble() ?? 1.0,
+        collectedToday: json['collectedToday'] as bool? ?? false,
+        nextMilestoneLabel:
+            (json['nextMilestoneLabel'] ?? 'Keep going!').toString(),
       );
 }

@@ -2,7 +2,7 @@
 ///
 /// Override at build time:
 /// ```
-/// flutter run --dart-define=API_BASE_URL=https://api.doomscroll.app
+/// flutter run --dart-define=API_BASE_URL=https://api.manyboost.io
 /// ```
 class EnvConfig {
   EnvConfig._();

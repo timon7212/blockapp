@@ -19,7 +19,7 @@ class _HelpScreenState extends State<HelpScreen> {
     (
       question: 'How does earning work?',
       answer:
-          'Use social media apps as you normally do. Every minute of screen time earns you 100 points, up to 2,000 per session. When your points are ready, open DoomScroll and watch a short video to claim them to your balance.',
+          'Use social media apps as you normally do. Every minute of screen time earns you 100 points, up to 2,000 per session. When your points are ready, open ManyBoost and watch a short video to claim them to your balance.',
     ),
     (
       question: 'What are streaks?',
@@ -120,7 +120,7 @@ class _HelpScreenState extends State<HelpScreen> {
                     GestureDetector(
                       onTap: () {
                         HapticFeedback.selectionClick();
-                        launchUrl(Uri.parse('mailto:support@doomscroll.app'));
+                        launchUrl(Uri.parse('mailto:support@manyboost.io'));
                       },
                       child: SurfaceCard(
                         padding: const EdgeInsets.symmetric(vertical: 16),

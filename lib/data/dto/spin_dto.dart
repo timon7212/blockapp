@@ -14,11 +14,11 @@ class SpinPrizeDto {
   });
 
   factory SpinPrizeDto.fromJson(Map<String, dynamic> json) => SpinPrizeDto(
-        id: json['id'] as String,
-        label: json['label'] as String,
-        type: SpinPrizeType.fromString(json['type'] as String),
-        value: (json['value'] as num).toDouble(),
-        weight: (json['weight'] as num).toInt(),
+        id: (json['id'] ?? json['_id'] ?? '').toString(),
+        label: (json['label'] ?? json['name'] ?? '').toString(),
+        type: SpinPrizeType.fromString((json['type'] ?? 'points').toString()),
+        value: (json['value'] as num? ?? json['points'] as num? ?? 0).toDouble(),
+        weight: (json['weight'] as num? ?? json['probability'] as num? ?? 1).toInt(),
       );
 }
 
@@ -55,10 +55,23 @@ class SpinWheelResponseDto {
 
   factory SpinWheelResponseDto.fromJson(Map<String, dynamic> json) =>
       SpinWheelResponseDto(
-        prizeType: SpinPrizeType.fromString(json['prizeType'] as String),
-        prizeValue: (json['prizeValue'] as num).toDouble(),
-        prizeLabel: json['prizeLabel'] as String,
-        newBalance: (json['newBalance'] as num).toInt(),
-        spinsRemaining: (json['spinsRemaining'] as num).toInt(),
+        prizeType: SpinPrizeType.fromString(
+            (json['prizeType'] ?? json['type'] ?? 'points').toString()),
+        prizeValue: (json['prizeValue'] as num? ??
+                json['value'] as num? ??
+                json['points'] as num? ??
+                0)
+            .toDouble(),
+        prizeLabel: (json['prizeLabel'] ?? json['label'] ?? json['prize'] ?? '')
+            .toString(),
+        newBalance: (json['newBalance'] as num? ??
+                json['balance'] as num? ??
+                json['totalPoints'] as num? ??
+                0)
+            .toInt(),
+        spinsRemaining: (json['spinsRemaining'] as num? ??
+                json['remainingSpins'] as num? ??
+                0)
+            .toInt(),
       );
 }

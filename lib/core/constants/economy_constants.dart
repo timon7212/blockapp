@@ -1,4 +1,4 @@
-/// DoomScroll Economy Constants
+/// ManyBoost Economy Constants
 ///
 /// BUSINESS MODEL:
 /// - Users accumulate points by spending time in social media apps (tracked via Screen Time API)

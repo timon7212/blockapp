@@ -14,6 +14,7 @@ import '../../core/utils/formatters.dart';
 import '../../core/constants/economy_constants.dart';
 import '../../data/dto/user_dto.dart';
 import '../../data/repositories/user_repository.dart';
+import '../../shared/providers/api_providers.dart';
 
 /// Streamlined 6-step onboarding:
 ///
@@ -57,6 +58,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
   static const int _welcomeBonus = 500;
   // ignore: unused_field
   bool _bonusClaimed = false;
+  bool _completing = false; // Guard against double-tap
 
   @override
   void initState() {
@@ -89,8 +91,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
   }
 
   void _complete() async {
+    if (_completing) return; // Prevent double-tap
+    _completing = true;
     HapticFeedback.heavyImpact();
     _bonusClaimed = true;
+
+    // Save references BEFORE async gap — widget may dispose when state changes
+    final notifier = ref.read(authNotifierProvider.notifier);
+    final container = ProviderScope.containerOf(context);
 
     // Call API to complete onboarding
     try {
@@ -101,12 +109,23 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
             ? 'reduce_${_dailyMinutes}min'
             : 'reduce_general',
       ));
+
+      // Give backend a moment to credit the welcome bonus
+      await Future.delayed(const Duration(milliseconds: 500));
     } catch (_) {
       // Continue even if API call fails
     }
 
-    // Refresh profile to get onboardingComplete = true
-    ref.read(authNotifierProvider.notifier).refreshProfile();
+    // Invalidate wallet/streak so they re-fetch with the 500-pt bonus
+    try {
+      container.invalidate(apiWalletProvider);
+      container.invalidate(apiStreakProvider);
+      container.invalidate(apiDailyStatsProvider);
+    } catch (_) {}
+
+    // Mark onboarding as done → routing will switch to AppShell
+    // Use saved reference — widget is likely disposed after this call
+    notifier.markOnboardingComplete();
   }
 
   int get _dailyPts {
@@ -325,7 +344,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
             colors: [AppColors.primary, AppColors.accent],
           ).createShader(bounds),
           child: Text(
-            'DoomScroll',
+            'ManyBoost',
             style: AppTypography.displayLarge.copyWith(
               fontSize: 42,
               color: Colors.white,

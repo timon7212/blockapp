@@ -12,7 +12,7 @@ class MockData {
 
   static final user = UserModel(
     id: 'user_001',
-    username: 'doomscroller',
+    username: 'manybooster',
     displayName: 'Alex',
     referralCode: 'DOOM2026',
     directInvites: 7,

@@ -18,7 +18,20 @@ class StoreRepository {
         ApiEndpoints.giftCards,
         queryParameters: {if (country != null) 'country': country},
       );
-      return (res.data as List<dynamic>)
+      // API may return a list directly or a paginated object like { data: [...] }
+      final dynamic body = res.data;
+      List<dynamic> items;
+      if (body is List<dynamic>) {
+        items = body;
+      } else if (body is Map<String, dynamic>) {
+        items = (body['data'] as List<dynamic>?) ??
+            (body['items'] as List<dynamic>?) ??
+            (body['giftCards'] as List<dynamic>?) ??
+            [];
+      } else {
+        items = [];
+      }
+      return items
           .map((e) => GiftCardDto.fromJson(e as Map<String, dynamic>))
           .toList();
     } on DioException catch (e) {
@@ -41,7 +54,16 @@ class StoreRepository {
   Future<List<RedemptionHistoryDto>> getRedemptionHistory() async {
     try {
       final res = await _api.get(ApiEndpoints.giftCardHistory);
-      return (res.data as List<dynamic>)
+      final dynamic body = res.data;
+      List<dynamic> items;
+      if (body is List<dynamic>) {
+        items = body;
+      } else if (body is Map<String, dynamic>) {
+        items = (body['data'] as List<dynamic>?) ?? [];
+      } else {
+        items = [];
+      }
+      return items
           .map((e) =>
               RedemptionHistoryDto.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -64,7 +86,16 @@ class StoreRepository {
   Future<List<CashOutHistoryDto>> getCashOutHistory() async {
     try {
       final res = await _api.get(ApiEndpoints.cashOutHistory);
-      return (res.data as List<dynamic>)
+      final dynamic body = res.data;
+      List<dynamic> items;
+      if (body is List<dynamic>) {
+        items = body;
+      } else if (body is Map<String, dynamic>) {
+        items = (body['data'] as List<dynamic>?) ?? [];
+      } else {
+        items = [];
+      }
+      return items
           .map((e) =>
               CashOutHistoryDto.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -78,7 +109,16 @@ class StoreRepository {
   Future<List<CharityDto>> getCharities() async {
     try {
       final res = await _api.get(ApiEndpoints.charities);
-      return (res.data as List<dynamic>)
+      final dynamic body = res.data;
+      List<dynamic> items;
+      if (body is List<dynamic>) {
+        items = body;
+      } else if (body is Map<String, dynamic>) {
+        items = (body['data'] as List<dynamic>?) ?? [];
+      } else {
+        items = [];
+      }
+      return items
           .map((e) => CharityDto.fromJson(e as Map<String, dynamic>))
           .toList();
     } on DioException catch (e) {
@@ -105,7 +145,16 @@ class StoreRepository {
   Future<List<LeaderboardEntryDto>> getWeeklyLeaderboard() async {
     try {
       final res = await _api.get(ApiEndpoints.leaderboardWeekly);
-      return (res.data as List<dynamic>)
+      final dynamic body = res.data;
+      List<dynamic> items;
+      if (body is List<dynamic>) {
+        items = body;
+      } else if (body is Map<String, dynamic>) {
+        items = (body['data'] as List<dynamic>?) ?? [];
+      } else {
+        items = [];
+      }
+      return items
           .map((e) =>
               LeaderboardEntryDto.fromJson(e as Map<String, dynamic>))
           .toList();

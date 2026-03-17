@@ -32,7 +32,7 @@ class AboutScreen extends StatelessWidget {
                             colors: [AppColors.primary, Color(0xFFa78bfa), Color(0xFFc4b5fd)],
                           ).createShader(bounds),
                           child: Text(
-                            'DoomScroll',
+                            'ManyBoost',
                             style: AppTypography.displaySmall.copyWith(
                               fontSize: 36,
                               fontWeight: FontWeight.w800,

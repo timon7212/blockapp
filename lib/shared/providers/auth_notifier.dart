@@ -14,14 +14,18 @@ enum AuthStatus { initial, authenticated, unauthenticated, loading }
 class AuthState {
   final AuthStatus status;
   final UserProfileDto? user;
-  final UserSummaryDto? userSummary; // from auth response (lighter)
+  final UserSummaryDto? userSummary;
   final String? error;
+  final bool isNewRegistration;
+  final bool needsEmailVerification;
 
   const AuthState({
     this.status = AuthStatus.initial,
     this.user,
     this.userSummary,
     this.error,
+    this.isNewRegistration = false,
+    this.needsEmailVerification = false,
   });
 
   bool get isAuthenticated => status == AuthStatus.authenticated;
@@ -32,19 +36,36 @@ class AuthState {
   String get displayName =>
       user?.displayName ?? userSummary?.displayName ?? '';
   String get email => user?.email ?? userSummary?.email ?? '';
-  bool get onboardingComplete => user?.onboardingComplete ?? false;
+
+  /// Should we show onboarding?
+  /// - New registration → always yes
+  /// - Full profile loaded, onboardingComplete == false → yes
+  /// - Otherwise (login, auto-login w/o profile yet) → no (assume done)
+  bool get needsOnboarding {
+    if (isNewRegistration) return true;
+    if (user != null) return !user!.onboardingComplete;
+    return false;
+  }
+
+  // Keep legacy getter for backward compat
+  bool get onboardingComplete => !needsOnboarding;
 
   AuthState copyWith({
     AuthStatus? status,
     UserProfileDto? user,
     UserSummaryDto? userSummary,
     String? error,
+    bool? isNewRegistration,
+    bool? needsEmailVerification,
   }) =>
       AuthState(
         status: status ?? this.status,
         user: user ?? this.user,
         userSummary: userSummary ?? this.userSummary,
         error: error,
+        isNewRegistration: isNewRegistration ?? this.isNewRegistration,
+        needsEmailVerification:
+            needsEmailVerification ?? this.needsEmailVerification,
       );
 }
 
@@ -63,7 +84,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   /// Check if there is a saved token → try to load profile.
   Future<void> tryAutoLogin() async {
-    final hasToken = await TokenService.hasTokens();
+    bool hasToken = false;
+    try {
+      hasToken = await TokenService.hasTokens();
+    } catch (e) {
+      debugPrint('tryAutoLogin: token check failed: $e');
+    }
+
     if (!hasToken) {
       state = const AuthState(status: AuthStatus.unauthenticated);
       return;
@@ -76,12 +103,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
         user: profile,
       );
     } on UnauthorizedException {
-      await TokenService.clearTokens();
+      try {
+        await TokenService.clearTokens();
+      } catch (_) {}
       state = const AuthState(status: AuthStatus.unauthenticated);
     } catch (e) {
       debugPrint('Auto-login getProfile failed: $e');
-      // Token exists but getProfile failed (maybe network issue).
-      // Still authenticate — the user can try refreshing later.
       state = const AuthState(status: AuthStatus.authenticated);
     }
   }
@@ -102,13 +129,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
         referralCode: referralCode,
       ));
 
-      // Use the user data from auth response directly — no extra API call!
       state = AuthState(
         status: AuthStatus.authenticated,
         userSummary: authResponse.user,
+        isNewRegistration: true,
       );
 
-      // Try loading full profile in background (non-blocking)
       _loadProfileInBackground();
     } on ApiException catch (e) {
       state = state.copyWith(
@@ -126,24 +152,32 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String email,
     required String password,
   }) async {
-    state = state.copyWith(status: AuthStatus.loading, error: null);
+    state = state.copyWith(
+        status: AuthStatus.loading,
+        error: null,
+        needsEmailVerification: false);
     try {
       final authResponse = await _authRepo.login(LoginRequest(
         email: email,
         password: password,
       ));
 
-      // Use the user data from auth response directly!
       state = AuthState(
         status: AuthStatus.authenticated,
         userSummary: authResponse.user,
+        isNewRegistration: false,
       );
 
-      // Try loading full profile in background
       _loadProfileInBackground();
     } on ApiException catch (e) {
+      final isVerification = e.message
+          .toLowerCase()
+          .contains('verify your email');
       state = state.copyWith(
-          status: AuthStatus.unauthenticated, error: e.message);
+        status: AuthStatus.unauthenticated,
+        error: e.message,
+        needsEmailVerification: isVerification,
+      );
     } catch (e) {
       debugPrint('Login error: $e');
       state = state.copyWith(
@@ -164,6 +198,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = AuthState(
         status: AuthStatus.authenticated,
         userSummary: authResponse.user,
+        // Google sign-in could be new or returning — profile will tell
+        isNewRegistration: false,
       );
 
       _loadProfileInBackground();
@@ -194,19 +230,35 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// Called after onboarding is completed — clears the flag so routing shows main app.
+  void markOnboardingComplete() {
+    state = state.copyWith(isNewRegistration: false);
+    // Also refresh profile in background to sync server state
+    refreshProfile();
+  }
+
+  /// Resend email verification.
+  Future<String> resendVerification(String email) async {
+    try {
+      final result = await _authRepo.resendVerification(email);
+      return result.message;
+    } catch (e) {
+      return 'Failed to resend. Try again later.';
+    }
+  }
+
   /// Clear error message.
   void clearError() {
-    state = state.copyWith(error: null);
+    state = state.copyWith(error: null, needsEmailVerification: false);
   }
 
   /// Dev-mode bypass: skip auth and enter the app with mock data.
-  /// Use this when the backend is down or for UI testing.
   void devBypass() {
     state = AuthState(
       status: AuthStatus.authenticated,
       user: UserProfileDto(
         id: 'dev-user-001',
-        email: 'dev@doomscroll.app',
+        email: 'dev@manyboost.io',
         displayName: 'Dev Tester',
         avatarUrl: null,
         referralCode: 'DEVCODE',
@@ -217,7 +269,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         currentStreak: 7,
         onboardingComplete: true,
         trackedAppIds: ['instagram', 'tiktok', 'youtube'],
+        spinsAvailable: 3,
       ),
+      isNewRegistration: false,
     );
   }
 
@@ -231,7 +285,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
         }
       } catch (e) {
         debugPrint('Background profile load failed: $e');
-        // Non-critical — user is already authenticated with summary data
       }
     });
   }

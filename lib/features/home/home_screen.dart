@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -15,9 +16,8 @@ import '../../design_system/widgets/gradient_background.dart';
 import '../../design_system/widgets/app_toast.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/constants/economy_constants.dart';
-import '../../models/wallet_model.dart';
 import '../../models/offerwall_item_model.dart';
-import '../../models/daily_goal_model.dart';
+import '../../design_system/widgets/shimmer_placeholder.dart';
 import '../../services/ad_service.dart';
 import '../../services/celebration_service.dart';
 import '../spin_wheel/spin_wheel_screen.dart';
@@ -105,7 +105,7 @@ class _TopBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final walletAsync = ref.watch(apiWalletProvider);
-    final rank = ref.watch(rankProvider);
+    final streakAsync = ref.watch(apiStreakProvider);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -169,24 +169,28 @@ class _TopBar extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    // Rank badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: rank.rankColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                            color: rank.rankColor.withValues(alpha: 0.25)),
-                      ),
-                      child: Text(
-                        '${rank.currentRank.icon} ${rank.currentRank.name}',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: rank.rankColor,
+                    // Streak multiplier badge
+                    streakAsync.when(
+                      data: (s) => Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                              color: AppColors.accent.withValues(alpha: 0.25)),
+                        ),
+                        child: Text(
+                          '🔥 ${s.multiplier}x',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.accent,
+                          ),
                         ),
                       ),
+                      loading: () => const SizedBox.shrink(),
+                      error: (_, __) => const SizedBox.shrink(),
                     ),
                   ],
                 ),
@@ -249,389 +253,461 @@ class _TopBar extends ConsumerWidget {
 }
 
 // ─── Streak Banner (taps to Duolingo-style detail) ───
+// Pure API-driven — no mock fallback
 class _StreakBanner extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final streak = ref.watch(streakProvider);
+    final streakAsync = ref.watch(apiStreakProvider);
 
-    final bool atRisk = !streak.isActiveToday && streak.currentStreak > 0;
-    final Color accentColor = atRisk ? AppColors.error : AppColors.warning;
+    return streakAsync.when(
+      data: (streak) {
+        final bool atRisk = !streak.collectedToday && streak.currentStreak > 0;
+        final Color accentColor = atRisk ? AppColors.error : AppColors.warning;
+        final String multiplierLabel = '${streak.multiplier}x';
 
-    final String headline;
-    final String subtitle;
-    if (streak.currentStreak == 0) {
-      headline = 'Start Your Streak';
-      subtitle = 'Claim points today to begin';
-    } else {
-      headline = '${streak.currentStreak}-day Streak 🔥';
-      subtitle = streak.isActiveToday
-          ? '${streak.currentTier.name} · ${streak.multiplierLabel} multiplier'
-          : 'Claim now to keep your streak!';
-    }
+        final String headline;
+        final String subtitle;
+        if (streak.currentStreak == 0) {
+          headline = 'Start Your Streak';
+          subtitle = 'Claim points today to begin';
+        } else {
+          headline = '${streak.currentStreak}-day Streak 🔥';
+          subtitle = streak.collectedToday
+              ? '$multiplierLabel multiplier · ${streak.nextMilestoneLabel}'
+              : 'Claim now to keep your streak!';
+        }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: SurfaceCard(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        borderColor: atRisk ? AppColors.error.withValues(alpha: 0.4) : null,
-        onTap: () {
-          Navigator.of(context)
-              .push(AppPageRoute(page: const StreakDetailScreen()));
-        },
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: accentColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(13),
-                border:
-                    Border.all(color: accentColor.withValues(alpha: 0.2)),
-              ),
-              child: Center(
-                child: Icon(Icons.local_fire_department_rounded,
-                    color: accentColor, size: 24),
-              ),
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: SurfaceCard(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            borderColor: atRisk ? AppColors.error.withValues(alpha: 0.4) : null,
+            onTap: () {
+              Navigator.of(context)
+                  .push(AppPageRoute(page: const StreakDetailScreen()));
+            },
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(13),
+                    border:
+                        Border.all(color: accentColor.withValues(alpha: 0.2)),
+                  ),
+                  child: Center(
+                    child: Icon(Icons.local_fire_department_rounded,
+                        color: accentColor, size: 24),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(headline, style: AppTypography.headlineSmall),
+                      const SizedBox(height: 2),
+                      Text(subtitle,
+                          style: AppTypography.bodySmall.copyWith(
+                            color: atRisk
+                                ? AppColors.error
+                                : AppColors.textTertiary,
+                          )),
+                    ],
+                  ),
+                ),
+                // Multiplier badge
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: AppColors.accent.withValues(alpha: 0.2)),
+                  ),
+                  child: Text(
+                    multiplierLabel,
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.accent),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(Icons.chevron_right_rounded,
+                    color: AppColors.textTertiary, size: 20),
+              ],
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(headline, style: AppTypography.headlineSmall),
-                  const SizedBox(height: 2),
-                  Text(subtitle,
-                      style: AppTypography.bodySmall.copyWith(
-                        color: atRisk
-                            ? AppColors.error
-                            : AppColors.textTertiary,
-                      )),
-                ],
-              ),
-            ),
-            // Multiplier badge
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: AppColors.accent.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                    color: AppColors.accent.withValues(alpha: 0.2)),
-              ),
-              child: Text(
-                streak.multiplierLabel,
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.accent),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Icon(Icons.chevron_right_rounded,
-                color: AppColors.textTertiary, size: 20),
-          ],
-        ),
+          ),
+        )
+            .animate()
+            .fadeIn(duration: 400.ms, delay: 50.ms)
+            .slideY(begin: 0.05, end: 0);
+      },
+      loading: () => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: ShimmerPlaceholder(height: 60, borderRadius: 16),
       ),
-    )
-        .animate()
-        .fadeIn(duration: 400.ms, delay: 50.ms)
-        .slideY(begin: 0.05, end: 0);
+      error: (e, st) {
+        debugPrint('Error loading streak: $e');
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: SurfaceCard(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            borderColor: AppColors.error.withValues(alpha: 0.3),
+            child: Row(
+              children: [
+                Icon(Icons.error_outline_rounded,
+                    color: AppColors.error, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text('Could not load streak',
+                      style: AppTypography.bodySmall
+                          .copyWith(color: AppColors.error)),
+                ),
+                GestureDetector(
+                  onTap: () => ref.invalidate(apiStreakProvider),
+                  child: Text('Retry',
+                      style: AppTypography.labelMedium
+                          .copyWith(color: AppColors.primary)),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 
-// ─── Daily Goals Mini Widget ───
+// ─── Daily Summary Widget (API-driven) ───
 class _DailyGoalsWidget extends ConsumerWidget {
   const _DailyGoalsWidget();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final goals = ref.watch(dailyGoalsProvider);
-    final completed = goals.completedCount;
-    final total = goals.totalCount;
+    final dailyAsync = ref.watch(apiDailyStatsProvider);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: SurfaceCard(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.flag_rounded,
-                    size: 18, color: AppColors.primary),
-                const SizedBox(width: 8),
-                Text('Daily Goals',
-                    style: AppTypography.headlineSmall
-                        .copyWith(fontSize: 14)),
-                const Spacer(),
-                Text(
-                  '$completed/$total',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: completed == total
-                        ? AppColors.success
-                        : AppColors.textSecondary,
+      child: dailyAsync.when(
+        data: (stats) => SurfaceCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.bar_chart_rounded,
+                      size: 18, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Text("Today's Stats",
+                      style: AppTypography.headlineSmall
+                          .copyWith(fontSize: 14)),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  _DailyStatItem(
+                    icon: Icons.timer_rounded,
+                    label: 'Screen Time',
+                    value: '${stats.screenTimeMinutes}m',
+                    color: AppColors.primary,
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            // Progress dots
-            Row(
-              children: goals.goals.map((g) {
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: Column(
-                      children: [
-                        Container(
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: g.isCompleted
-                                ? AppColors.success
-                                : AppColors.surfaceLight,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Icon(
-                          g.icon,
-                          size: 18,
-                          color: g.isCompleted
-                              ? AppColors.success
-                              : AppColors.textTertiary,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          g.title,
-                          style: AppTypography.caption.copyWith(
-                            fontSize: 9,
-                            color: g.isCompleted
-                                ? AppColors.success
-                                : AppColors.textTertiary,
-                          ),
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
+                  const SizedBox(width: 10),
+                  _DailyStatItem(
+                    icon: Icons.toll_rounded,
+                    label: 'Earned',
+                    value: Formatters.number(stats.pointsEarned),
+                    color: AppColors.success,
                   ),
-                );
-              }).toList(),
-            ),
-            if (goals.allCompleted && !goals.dailyBonusClaimed) ...[
-              const SizedBox(height: 12),
-              GestureDetector(
-                onTap: () {
-                  HapticFeedback.heavyImpact();
-                  ref.read(dailyGoalsProvider.notifier).claimDailyBonus();
-                  ref.read(walletProvider.notifier).addPoints(
-                        EconomyConstants.dailyGoalBonusFull,
-                        'Daily Goals Bonus ⭐',
-                        TransactionType.offerwall,
-                      );
-                  CelebrationService.showDailyGoalsComplete(
-                    context,
-                    bonusPoints: EconomyConstants.dailyGoalBonusFull,
-                  );
-                },
-                child: Container(
-                  width: double.infinity,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    gradient: AppColors.successGradient,
-                    borderRadius: BorderRadius.circular(10),
+                  const SizedBox(width: 10),
+                  _DailyStatItem(
+                    icon: Icons.savings_rounded,
+                    label: 'Collected',
+                    value: Formatters.number(stats.pointsCollected),
+                    color: AppColors.accent,
                   ),
-                  child: Center(
-                    child: Text(
-                      'Claim ${Formatters.number(EconomyConstants.dailyGoalBonusFull)} bonus! ⭐',
-                      style: AppTypography.button
-                          .copyWith(color: Colors.white, fontSize: 14),
-                    ),
-                  ),
-                ),
+                ],
               ),
             ],
-          ],
+          ),
         ),
+        loading: () => ShimmerPlaceholder(height: 100, borderRadius: 16),
+        error: (_, __) => const SizedBox.shrink(),
       ),
     ).animate().fadeIn(duration: 400.ms, delay: 80.ms);
   }
 }
 
+class _DailyStatItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+  const _DailyStatItem({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.12)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(height: 6),
+            Text(value,
+                style: AppTypography.headlineSmall
+                    .copyWith(fontSize: 13, color: color)),
+            const SizedBox(height: 2),
+            Text(label,
+                style: AppTypography.caption.copyWith(fontSize: 9)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ─── Accumulation Widget (Core Loop) ───
+// Pure API-driven — uses apiWalletProvider for uncollected points, apiDailyStatsProvider for sessions
 class _AccumulationWidget extends ConsumerWidget {
   const _AccumulationWidget();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final st = ref.watch(screenTimeProvider);
-    final hasPending = st.accumulatedPoints > 0;
-    final progress = st.progress.clamp(0.0, 1.0);
-    final sessionsToday = ref.watch(sessionsClaimedTodayProvider);
+    final walletAsync = ref.watch(apiWalletProvider);
+    final dailyStatsAsync = ref.watch(apiDailyStatsProvider);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: GlassCard(
-        padding: EdgeInsets.zero,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: st.isCapped
-              ? [
-                  AppColors.points.withValues(alpha: 0.08),
-                  AppColors.pointsDim.withValues(alpha: 0.04),
-                ]
-              : [
-                  AppColors.primary.withValues(alpha: 0.07),
-                  AppColors.accent.withValues(alpha: 0.03),
-                ],
-        ),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-              child: Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color:
-                          st.isCapped ? AppColors.points : AppColors.success,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    st.isCapped ? 'Ready to Claim!' : 'Accumulating...',
-                    style: AppTypography.labelMedium.copyWith(
-                      color:
-                          st.isCapped ? AppColors.points : AppColors.success,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const Spacer(),
-                  // Sessions counter
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceLight,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      'Session ${sessionsToday + 1}/${EconomyConstants.maxSessionsPerDay}',
-                      style: AppTypography.caption.copyWith(fontSize: 10),
-                    ),
-                  ),
-                ],
-              ),
+    return walletAsync.when(
+      data: (wallet) {
+        final uncollected = wallet.uncollectedPoints;
+        final hasPending = uncollected > 0;
+        final maxPts = EconomyConstants.maxAccumulationMinutes *
+            EconomyConstants.pointsPerMinute;
+        final isCapped = uncollected >= maxPts;
+        final progress = maxPts > 0
+            ? (uncollected / maxPts).clamp(0.0, 1.0)
+            : 0.0;
+
+        // Session counter from daily stats
+        final sessionsCollected = dailyStatsAsync.valueOrNull?.pointsCollected ?? 0;
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: GlassCard(
+            padding: EdgeInsets.zero,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isCapped
+                  ? [
+                      AppColors.points.withValues(alpha: 0.08),
+                      AppColors.pointsDim.withValues(alpha: 0.04),
+                    ]
+                  : [
+                      AppColors.primary.withValues(alpha: 0.07),
+                      AppColors.accent.withValues(alpha: 0.03),
+                    ],
             ),
-            const SizedBox(height: 28),
-            CircularPercentIndicator(
-              radius: 80,
-              lineWidth: 10,
-              percent: progress,
-              animation: true,
-              animationDuration: 800,
-              circularStrokeCap: CircularStrokeCap.round,
-              backgroundColor: AppColors.surfaceLight,
-              linearGradient: st.isCapped
-                  ? const LinearGradient(
-                      colors: [AppColors.points, AppColors.pointsDim])
-                  : const LinearGradient(
-                      colors: [AppColors.accent, AppColors.primary]),
-              center: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    Formatters.number(st.accumulatedPoints),
-                    style: AppTypography.number.copyWith(
-                      fontSize: 32,
-                      color: st.isCapped
-                          ? AppColors.points
-                          : AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${st.accumulatedMinutes}/${EconomyConstants.maxAccumulationMinutes} min',
-                    style: AppTypography.caption.copyWith(fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text('points accumulated',
-                style: AppTypography.bodySmall
-                    .copyWith(color: AppColors.textTertiary)),
-            const SizedBox(height: 24),
-            if (hasPending)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                child: _ClaimButton(
-                    points: st.accumulatedPoints, isFull: st.isCapped),
-              )
-            else
-              // ── Empty State: Guide user to social media ──
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.accent.withValues(alpha: 0.06),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                        color: AppColors.accent.withValues(alpha: 0.15)),
-                  ),
-                  child: Column(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                  child: Row(
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.phone_android_rounded,
-                              size: 18, color: AppColors.accent),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Go browse social media!',
-                            style: AppTypography.headlineSmall.copyWith(
-                              color: AppColors.accent,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Open Instagram, TikTok, X, or Snapchat.\nAfter 20 min, come back to claim 2,000 pts!',
-                        style: AppTypography.caption.copyWith(
-                          color: AppColors.textSecondary,
-                          fontSize: 11,
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color:
+                              isCapped ? AppColors.points : AppColors.success,
+                          shape: BoxShape.circle,
                         ),
-                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        isCapped ? 'Ready to Claim!' : hasPending ? 'Points Available' : 'Accumulating...',
+                        style: AppTypography.labelMedium.copyWith(
+                          color:
+                              isCapped ? AppColors.points : AppColors.success,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      // Sessions counter
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceLight,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'Collected ${sessionsCollected}x today',
+                          style: AppTypography.caption.copyWith(fontSize: 10),
+                        ),
                       ),
                     ],
                   ),
                 ),
-              ),
-          ],
-        ),
+                const SizedBox(height: 28),
+                CircularPercentIndicator(
+                  radius: 80,
+                  lineWidth: 10,
+                  percent: progress,
+                  animation: true,
+                  animationDuration: 800,
+                  circularStrokeCap: CircularStrokeCap.round,
+                  backgroundColor: AppColors.surfaceLight,
+                  linearGradient: isCapped
+                      ? const LinearGradient(
+                          colors: [AppColors.points, AppColors.pointsDim])
+                      : const LinearGradient(
+                          colors: [AppColors.accent, AppColors.primary]),
+                  center: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        Formatters.number(uncollected),
+                        style: AppTypography.number.copyWith(
+                          fontSize: 32,
+                          color: isCapped
+                              ? AppColors.points
+                              : AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'uncollected',
+                        style: AppTypography.caption.copyWith(fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text('points accumulated',
+                    style: AppTypography.bodySmall
+                        .copyWith(color: AppColors.textTertiary)),
+                const SizedBox(height: 24),
+                if (hasPending)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                    child: _ClaimButton(
+                        points: uncollected, isFull: isCapped),
+                  )
+                else
+                  // ── Empty State: Guide user to social media ──
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.accent.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: AppColors.accent.withValues(alpha: 0.15)),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.phone_android_rounded,
+                                  size: 18, color: AppColors.accent),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Go browse social media!',
+                                style: AppTypography.headlineSmall.copyWith(
+                                  color: AppColors.accent,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Open Instagram, TikTok, X, or Snapchat.\nAfter 20 min, come back to claim 2,000 pts!',
+                            style: AppTypography.caption.copyWith(
+                              color: AppColors.textSecondary,
+                              fontSize: 11,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ).animate().fadeIn(duration: 500.ms, delay: 100.ms).slideY(
+              begin: 0.05,
+              end: 0,
+            );
+      },
+      loading: () => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: ShimmerPlaceholder(height: 280, borderRadius: 20),
       ),
-    ).animate().fadeIn(duration: 500.ms, delay: 100.ms).slideY(
-          begin: 0.05,
-          end: 0,
+      error: (e, st) {
+        debugPrint('Error loading wallet for accumulation: $e');
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: SurfaceCard(
+            padding: const EdgeInsets.all(20),
+            borderColor: AppColors.error.withValues(alpha: 0.3),
+            child: Column(
+              children: [
+                Icon(Icons.cloud_off_rounded,
+                    color: AppColors.error, size: 32),
+                const SizedBox(height: 10),
+                Text('Could not load wallet data',
+                    style: AppTypography.bodySmall
+                        .copyWith(color: AppColors.error)),
+                const SizedBox(height: 10),
+                GestureDetector(
+                  onTap: () {
+                    ref.invalidate(apiWalletProvider);
+                    ref.invalidate(apiDailyStatsProvider);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text('Retry',
+                        style: AppTypography.labelMedium
+                            .copyWith(color: AppColors.primary)),
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
+      },
+    );
   }
 }
 
-// ─── Claim Button with improved error handling ───
+// ─── Claim Button — pure API ───
 class _ClaimButton extends ConsumerStatefulWidget {
   final int points;
   final bool isFull;
@@ -648,71 +724,56 @@ class _ClaimButtonState extends ConsumerState<_ClaimButton> {
 
   void _claim() async {
     if (_isLoading) return;
+
+    // Guard: don't call API if no uncollected points (prevents 400 error)
+    if (widget.points <= 0) {
+      if (mounted) {
+        AppToast.show(context,
+            message: 'No points to collect yet. Browse social media first!',
+            type: ToastType.info);
+      }
+      return;
+    }
+
     setState(() => _isLoading = true);
     HapticFeedback.heavyImpact();
 
     await AdService.showRewardedAd(
-      onRewarded: () {
-        final basePts = ref.read(screenTimeProvider.notifier).claim();
-        final streak = ref.read(streakProvider);
-        final multiplied = (basePts * streak.multiplier).round();
+      onRewarded: () async {
+        try {
+          // Call API to collect points
+          final result = await ref.read(eventsRepoProvider).collectPoints();
+          final claimedPts = result.pointsCollected;
+          debugPrint('✅ API collectPoints: $claimedPts pts, new balance: ${result.newBalance}');
 
-        // Record streak
-        ref.read(streakProvider.notifier).recordClaim();
+          // Refresh all API providers
+          ref.invalidate(apiWalletProvider);
+          ref.invalidate(apiDailyStatsProvider);
+          ref.invalidate(apiStreakProvider);
+          ref.read(authNotifierProvider.notifier).refreshProfile();
+          _retryCount = 0;
 
-        // Add points
-        ref.read(walletProvider.notifier).addPoints(
-              multiplied,
-              'Screen time claim (${streak.multiplierLabel})',
-              TransactionType.screenTimeClaim,
+          HapticFeedback.heavyImpact();
+
+          // Show celebration
+          if (context.mounted) {
+            final streakMultiplier = ref.read(apiStreakProvider).valueOrNull?.multiplier ?? 1.0;
+            CelebrationService.showPointsClaimed(
+              context,
+              points: claimedPts,
+              multiplierLabel: '${streakMultiplier}x',
             );
-
-        // Update rank
-        ref.read(rankProvider.notifier).addPoints(multiplied);
-
-        // Complete daily goal
-        ref
-            .read(dailyGoalsProvider.notifier)
-            .completeGoal(DailyGoalType.claimSession);
-
-        // Track ad watched
-        ref
-            .read(dailyGoalsProvider.notifier)
-            .completeGoal(DailyGoalType.watchAds);
-
-        // Increment sessions
-        ref.read(sessionsClaimedTodayProvider.notifier).state++;
-
-        // Reset retry count
-        _retryCount = 0;
-
-        HapticFeedback.heavyImpact();
-
-        // Show celebration
-        if (context.mounted) {
-          CelebrationService.showPointsClaimed(
-            context,
-            points: multiplied,
-            multiplierLabel: streak.multiplierLabel,
-          );
+          }
+        } catch (e) {
+          debugPrint('❌ API collectPoints failed: $e');
+          if (context.mounted) {
+            AppToast.show(context,
+                message: 'Failed to collect points: $e',
+                type: ToastType.error);
+          }
+        } finally {
+          if (mounted) setState(() => _isLoading = false);
         }
-
-        // Check for streak milestone
-        final newStreak = ref.read(streakProvider);
-        if (newStreak.isSpecialMilestone) {
-          Future.delayed(const Duration(milliseconds: 2800), () {
-            if (context.mounted) {
-              CelebrationService.showStreakMilestone(
-                context,
-                days: newStreak.currentStreak,
-                tierName: newStreak.currentTier.name,
-                multiplierLabel: newStreak.multiplierLabel,
-              );
-            }
-          });
-        }
-
-        setState(() => _isLoading = false);
       },
       onFailed: () {
         setState(() {
@@ -738,14 +799,15 @@ class _ClaimButtonState extends ConsumerState<_ClaimButton> {
 
   @override
   Widget build(BuildContext context) {
-    final streak = ref.watch(streakProvider);
-    final multipliedPts = (widget.points * streak.multiplier).round();
+    final streakAsync = ref.watch(apiStreakProvider);
+    final multiplier = streakAsync.valueOrNull?.multiplier ?? 1.0;
+    final multipliedPts = (widget.points * multiplier).round();
 
     final label = _isLoading
-        ? 'Loading ad...'
+        ? 'Claiming...'
         : _retryCount >= _maxRetries
             ? 'Retry later'
-            : 'Claim ${Formatters.number(multipliedPts)} pts (${streak.multiplierLabel})';
+            : 'Claim ${Formatters.number(multipliedPts)} pts (${multiplier}x)';
 
     return GestureDetector(
       onTap: _retryCount < _maxRetries ? _claim : null,
@@ -810,7 +872,8 @@ class _ClaimButtonState extends ConsumerState<_ClaimButton> {
 class _QuickActions extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final spinsLeft = ref.watch(spinsRemainingProvider);
+    // Spins count is not available from daily stats API, use constant
+    const spinsLeft = EconomyConstants.maxSpinsPerDay;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
